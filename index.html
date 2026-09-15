@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tacuarembó 3D GIS - Diagnóstico e Inteligencia Territorial</title>
+    
+    <!-- MapLibre GL JS -->
+    <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+    <!-- PMTiles Protocol -->
+    <script src="https://unpkg.com/pmtiles@2.11.0/dist/index.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #101f16; color: #f5efe3; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Panel Lateral Principal */
+        .panel {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(21, 43, 30, 0.92);
+            padding: 20px 24px;
+            border-radius: 14px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+            width: 320px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h1 { margin: 0 0 6px 0; font-size: 20px; color: #f5efe3; font-weight: 700; letter-spacing: -0.5px; }
+        .panel p { margin: 0 0 16px 0; font-size: 12px; color: #b8c9b3; line-height: 1.4; }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #e58a3f;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        /* Buscador */
+        .search-box {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #3e5d49;
+            background: #152b1e;
+            color: #f5efe3;
+            font-size: 13px;
+            box-sizing: border-box;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .search-box input:focus {
+            border-color: #e58a3f;
+            box-shadow: 0 0 0 2px rgba(229, 138, 63, 0.25);
+        }
+
+        /* Resultados Buscador Dropdown */
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #152b1e;
+            border: 1px solid #3e5d49;
+            border-radius: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            z-index: 20;
+            margin-top: 4px;
+            display: none;
+        }
+        .search-item {
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #3e5d49;
+        }
+        .search-item:hover { background: #c9712f; color: white; }
+        .search-item strong { display: block; color: #f5efe3; }
+        .search-item span { font-size: 10px; color: #b8c9b3; }
+
+        /* Dashboard de Métricas */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .metric-card {
+            background: #152b1e;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #3e5d49;
+        }
+        .metric-val { font-size: 18px; font-weight: 700; color: #e58a3f; margin-top: 2px; }
+        .metric-lbl { font-size: 10px; color: #b8c9b3; text-transform: uppercase; font-weight: 600; }
+
+        /* Switch Toggle Vegetacion */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #152b1e;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #3e5d49;
+            margin-bottom: 16px;
+        }
+        .toggle-label { font-size: 12px; font-weight: 600; color: #f5efe3; }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 38px;
+            height: 20px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #3e5d49;
+            transition: .3s;
+            border-radius: 20px;
+        }
+        .slider-round:before {
+            position: absolute;
+            content: "";
+            height: 14px; width: 14px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider-round { background-color: #e58a3f; }
+        input:checked + .slider-round:before { transform: translateX(18px); }
+
+        /* Marco Negro de Cuadrante para Conteo */
+        .reticle-box {
+            position: absolute;
+            top: 65px;
+            bottom: 65px;
+            right: 65px;
+            left: 400px;
+            border: 4px solid #000000;
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Slider Filtro */
+        .slider-container {
+            margin-bottom: 16px;
+        }
+        .slider-container input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #e58a3f;
+        }
+
+        /* Leyenda */
+        .leyenda {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 10px;
+            color: #b8c9b3;
+        }
+        .gradient-bar {
+            height: 8px;
+            width: 100%;
+            border-radius: 4px;
+            background: linear-gradient(to right, #e8dfc9, #d4b585, #b0764a, #7c4a2d);
+            margin-top: 4px;
+        }
+
+        /* MapLibre Popup Custom */
+        .maplibregl-popup-content {
+            background: #152b1e;
+            color: #f5efe3;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            font-family: system-ui, sans-serif;
+            border: 1px solid #3e5d49;
+            max-width: 260px;
+        }
+        .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #152b1e; }
+        .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #152b1e; }
+        .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #152b1e; }
+        .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #152b1e; }
+        
+        .popup-title { font-weight: 700; font-size: 15px; color: #f5efe3; margin-bottom: 4px; }
+        .popup-tag { font-size: 10px; font-weight: 700; padding: 3px 8px; background: rgba(229, 138, 63, 0.22); color: #e58a3f; border-radius: 4px; display: inline-block; margin-bottom: 8px; text-transform: uppercase; }
+        .popup-val { font-size: 12px; color: #d4dfd0; margin: 4px 0; line-height: 1.3; }
+        .popup-val strong { color: #f5efe3; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1>Tacuarembó 3D GIS</h1>
+        <p><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong></p>
+        <p>Gemelo digital 3D integrando huellas de <strong>Overture Maps</strong> con elevaciones <strong>LiDAR (IDE Uy)</strong> capturadas por último vuelo con cámara <strong>UltraCam Eagle Prime</strong> (10 cm).</p>
+
+        <!-- Buscador de Lugares / POIs -->
+        <span class="section-title">🔍 Buscador de Lugares / POIs</span>
+        <div class="search-box">
+            <input type="text" id="input-search" placeholder="Ej. Plaza, Hospital, Escuela, Comercio..." oninput="buscarLugar(this.value)">
+            <div id="search-results" class="search-results"></div>
+        </div>
+
+        <!-- Dashboard Analítico de Métricas del Cuadrante -->
+        <span class="section-title">📊 Diagnóstico en Cuadrante</span>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-lbl">Edificios</div>
+                <div id="m-edificios" class="metric-val">0</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-lbl">Árboles 3D</div>
+                <div id="m-arboles" class="metric-val" style="color: #4ade80;">0</div>
+            </div>
+            <div class="metric-card" style="display: flex; flex-direction: column; justify-content: center;">
+                <div class="metric-lbl" style="margin-bottom: 6px;">Arboles</div>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-veg" checked onchange="toggleVegetacion(this.checked)">
+                    <span class="slider-round"></span>
+                </label>
+            </div>
+            <div class="metric-card">
+                <div class="metric-lbl">Ratio Verde/Gris</div>
+                <div id="m-ratio" class="metric-val" style="color: #a7f3d0;">0%</div>
+            </div>
+        </div>
+
+        <!-- Interruptor Capa Manzanas -->
+        <div class="toggle-container">
+            <span class="toggle-label">🌳 Densidad de arboles por cuadra</span>
+            <label class="switch">
+                <input type="checkbox" id="toggle-manzanas" onchange="toggleManzanas(this.checked)">
+                <span class="slider-round"></span>
+            </label>
+        </div>
+
+        <!-- Leyenda -->
+        <div>
+            <span class="section-title">🏢 Escala de Altura (Metros)</span>
+            <div class="gradient-bar"></div>
+            <div class="leyenda">
+                <span>0 m</span>
+                <span>10 m</span>
+                <span>20 m</span>
+                <span>+35 m</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+    <div id="reticle-box" class="reticle-box"></div>
+
+    <script>
+        // Inicializar y Registrar Protocolo PMTiles en MapLibre GL JS
+        const protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        const TACUAREMBO_CENTER = [-55.9811, -31.7133];
+        const STYLE_MAPA = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+
+        let listaPois = [];
+
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: STYLE_MAPA,
+            center: TACUAREMBO_CENTER,
+            zoom: 15.8,
+            pitch: 62,      // Inclinación 3D
+            bearing: -22,   // Orientación
+            antialias: true
+        });
+
+        map.on('load', () => {
+            // 1. Capa de Parques y Plazas
+            map.addSource('parques_source', {
+                type: 'vector',
+                url: 'pmtiles://parques.pmtiles'
+            });
+
+            map.addLayer({
+                'id': 'parques-layer',
+                'type': 'fill',
+                'source': 'parques_source',
+                'source-layer': 'parques',
+                'paint': {
+                    'fill-color': '#4d9e63',
+                    'fill-opacity': 0.45
+                }
+            });
+
+            map.addLayer({
+                'id': 'parques-borde',
+                'type': 'line',
+                'source': 'parques_source',
+                'source-layer': 'parques',
+                'paint': {
+                    'line-color': '#2e6b3f',
+                    'line-width': 1.5
+                }
+            });
+
+            // 1b. Capa de Manzanas Urbanas (Balance Cobertura Forestal - Semáforo)
+            map.addSource('manzanas_source', {
+                type: 'vector',
+                url: 'pmtiles://manzanas.pmtiles'
+            });
+
+            map.addLayer({
+                'id': 'manzanas-layer',
+                'type': 'fill',
+                'source': 'manzanas_source',
+                'source-layer': 'manzanas',
+                'layout': {
+                    'visibility': 'none'
+                },
+                'paint': {
+                    'fill-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'ratio_verde'],
+                        0.0, '#ef4444',   // Rojo (Sin árboles / Déficit crítico)
+                        1.0, '#f97316',   // Naranja (Baja vegetación)
+                        3.5, '#eab308',   // Amarillo (Medio / Transición)
+                        7.0, '#22c55e',   // Verde Claro (Buena vegetación)
+                        15.0, '#15803d'   // Verde Oscuro (Alta densidad forestal)
+                    ],
+                    'fill-opacity': 0.65
+                }
+            });
+
+            map.addLayer({
+                'id': 'manzanas-borde',
+                'type': 'line',
+                'source': 'manzanas_source',
+                'source-layer': 'manzanas',
+                'layout': {
+                    'visibility': 'none'
+                },
+                'paint': {
+                    'line-color': '#101f16',
+                    'line-width': 1.2,
+                    'line-opacity': 0.6
+                }
+            });
+
+            // 2. Capa de Arbolado y Vegetación 3D (462,806 árboles en PMTiles)
+            map.addSource('arboles_3d_source', {
+                type: 'vector',
+                url: 'pmtiles://arboles.pmtiles'
+            });
+
+            map.addLayer({
+                'id': 'arboles-extruidos-3d',
+                'type': 'fill-extrusion',
+                'source': 'arboles_3d_source',
+                'source-layer': 'arboles',
+                'paint': {
+                    'fill-extrusion-height': ['get', 'altura_m'],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'altura_m'],
+                        2, '#9dbb63',
+                        6, '#63994f',
+                        12, '#38713f',
+                        20, '#173f27'
+                    ],
+                    'fill-extrusion-opacity': 0.85
+                }
+            });
+
+            // 3. Capa de Edificios 3D (51,849 edificios en PMTiles)
+            map.addSource('edificios_3d_source', {
+                type: 'vector',
+                url: 'pmtiles://edificios.pmtiles'
+            });
+
+            map.addLayer({
+                'id': 'edificios-extruidos-3d',
+                'type': 'fill-extrusion',
+                'source': 'edificios_3d_source',
+                'source-layer': 'edificios',
+                'paint': {
+                    'fill-extrusion-height': ['get', 'altura_m'],
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['get', 'altura_m'],
+                        0, '#e8dfc9',
+                        6, '#d4b585',
+                        15, '#b0764a',
+                        35, '#7c4a2d'
+                    ],
+                    'fill-extrusion-opacity': 0.88
+                }
+            });
+
+            // Cargar POIs para el buscador desde pois.json local
+            fetch('pois.json')
+                .then(r => r.json())
+                .then(data => {
+                    if (data) listaPois = data;
+                }).catch(e => console.log('Aviso POIs JSON:', e));
+
+            map.addControl(new maplibregl.NavigationControl());
+
+            // Actualizar Métricas en tiempo real al mover/rotar el mapa
+            map.on('move', actualizarMetricas);
+            map.on('moveend', actualizarMetricas);
+            actualizarMetricas();
+        });
+
+        // Evento Click en Edificios 3D
+        map.on('click', 'edificios-extruidos-3d', (e) => {
+            if (!e.features.length) return;
+            
+            const props = e.features[0].properties;
+            const nombre = props.nombre || props.poi_nombre || 'Edificación Urbana';
+            const categoria = props.poi_categoria || props.clase || 'Residencial / Servicio';
+            const altura = props.altura_m ? props.altura_m.toFixed(1) : '4.0';
+            const pisos = Math.max(1, Math.round(props.altura_m / 3.5));
+            const lidarStatus = props.altura_lidar ? '✅ Medida real con LiDAR (10cm)' : 'ℹ️ Estimada por modelo base';
+
+            const content = `
+                <div class="popup-title">${nombre}</div>
+                <div class="popup-tag">${categoria}</div>
+                <div class="popup-val">📐 <strong>Altura:</strong> ${altura} metros (~${pisos} pisos)</div>
+                <div class="popup-val">📡 <strong>Origen Z:</strong> ${lidarStatus}</div>
+            `;
+
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(content)
+                .addTo(map);
+        });
+
+        // Cambiar Cursor
+        map.on('mouseenter', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = ''; });
+
+        // Actualizar Dashboard de Métricas del Cuadrante Negro
+        function actualizarMetricas() {
+            const reticle = document.getElementById('reticle-box');
+            let featuresEdif = [];
+            let featuresArboles = [];
+
+            if (reticle) {
+                const rect = reticle.getBoundingClientRect();
+                const mapCanvas = map.getCanvas().getBoundingClientRect();
+                const x1 = rect.left - mapCanvas.left;
+                const y1 = rect.top - mapCanvas.top;
+                const x2 = rect.right - mapCanvas.left;
+                const y2 = rect.bottom - mapCanvas.top;
+                
+                featuresEdif = map.queryRenderedFeatures([[x1, y1], [x2, y2]], { layers: ['edificios-extruidos-3d'] });
+                if (map.getLayer('arboles-extruidos-3d')) {
+                    featuresArboles = map.queryRenderedFeatures([[x1, y1], [x2, y2]], { layers: ['arboles-extruidos-3d'] });
+                }
+            } else {
+                featuresEdif = map.queryRenderedFeatures({ layers: ['edificios-extruidos-3d'] });
+                if (map.getLayer('arboles-extruidos-3d')) {
+                    featuresArboles = map.queryRenderedFeatures({ layers: ['arboles-extruidos-3d'] });
+                }
+            }
+
+            const uniqueEdif = new Set();
+            let maxAlt = 0;
+
+            featuresEdif.forEach(f => {
+                const id = f.id || (f.properties && f.properties.id) || (f.geometry ? JSON.stringify(f.geometry.coordinates[0][0]) : Math.random());
+                uniqueEdif.add(id);
+                const h = (f.properties && f.properties.altura_m) ? f.properties.altura_m : 4;
+                if (h > maxAlt) maxAlt = h;
+            });
+
+            const totalEdif = uniqueEdif.size > 0 ? uniqueEdif.size : featuresEdif.length;
+            const totalArboles = featuresArboles.length;
+
+            // Cálculo Ratio Verde/Gris
+            let ratio = 0;
+            if (totalEdif + totalArboles > 0) {
+                ratio = Math.round((totalArboles / (totalEdif + totalArboles)) * 100);
+            }
+
+            document.getElementById('m-edificios').innerText = totalEdif.toLocaleString();
+            document.getElementById('m-arboles').innerText = totalArboles.toLocaleString();
+            document.getElementById('m-ratio').innerText = ratio + '%';
+        }
+
+        // Evento Click en Manzanas Urbanas
+        map.on('click', 'manzanas-layer', (e) => {
+            if (!e.features.length) return;
+            const props = e.features[0].properties;
+            const idManz = props.id_manzana || 'Urbana';
+            const arboles = props.cant_arboles || 0;
+            const edif = props.cant_edificios || 0;
+            const ratio = props.ratio_verde ? props.ratio_verde.toFixed(1) : '0.0';
+
+            const content = `
+                <div class="popup-title">Manzana Urbana #${idManz}</div>
+                <div class="popup-tag">Densidad Forestal</div>
+                <div class="popup-val">🌳 <strong>Arbolado:</strong> ${arboles} ejemplares</div>
+                <div class="popup-val">🏢 <strong>Edificación:</strong> ${edif} estructuras</div>
+                <div class="popup-val">🌿 <strong>Cobertura Verde:</strong> ${ratio}% del suelo</div>
+            `;
+
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(content)
+                .addTo(map);
+        });
+
+        // Toggle Capa Vegetacion (Arboles 3D)
+        function toggleVegetacion(visible) {
+            const manzanasChecked = document.getElementById('toggle-manzanas') ? document.getElementById('toggle-manzanas').checked : false;
+            if (!manzanasChecked && map.getLayer('arboles-extruidos-3d')) {
+                map.setLayoutProperty('arboles-extruidos-3d', 'visibility', visible ? 'visible' : 'none');
+            }
+            actualizarMetricas();
+        }
+
+        // Toggle Capa Manzanas (Densidad de arboles por cuadra)
+        function toggleManzanas(visible) {
+            const visibility = visible ? 'visible' : 'none';
+            if (map.getLayer('manzanas-layer')) {
+                map.setLayoutProperty('manzanas-layer', 'visibility', visibility);
+                map.setLayoutProperty('manzanas-borde', 'visibility', visibility);
+            }
+
+            if (visible) {
+                // Al activar la densidad por cuadra: Ocultar edificios y árboles
+                if (map.getLayer('edificios-extruidos-3d')) {
+                    map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'none');
+                }
+                if (map.getLayer('arboles-extruidos-3d')) {
+                    map.setLayoutProperty('arboles-extruidos-3d', 'visibility', 'none');
+                }
+            } else {
+                // Al desactivar: Restaurar edificios y árboles
+                if (map.getLayer('edificios-extruidos-3d')) {
+                    map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'visible');
+                }
+                const vegChecked = document.getElementById('toggle-veg') ? document.getElementById('toggle-veg').checked : true;
+                if (map.getLayer('arboles-extruidos-3d')) {
+                    map.setLayoutProperty('arboles-extruidos-3d', 'visibility', vegChecked ? 'visible' : 'none');
+                }
+            }
+            actualizarMetricas();
+        }
+
+        // Buscador de Lugares / POIs desde pois.json local
+        function buscarLugar(q) {
+            const resContainer = document.getElementById('search-results');
+            if (!q || q.length < 2) {
+                resContainer.style.display = 'none';
+                return;
+            }
+
+            const query = q.toLowerCase();
+            const matches = listaPois.filter(item => {
+                const n = item.n || '';
+                const c = item.c || '';
+                return n.toLowerCase().includes(query) || c.toLowerCase().includes(query);
+            }).slice(0, 5);
+
+            if (matches.length === 0) {
+                resContainer.style.display = 'none';
+                return;
+            }
+
+            resContainer.innerHTML = matches.map((item, i) => `
+                <div class="search-item" onclick="volarA(${item.x}, ${item.y}, '${item.n.replace(/'/g, "\'")}', '${item.c.replace(/'/g, "\'")}')">
+                    <strong>${item.n}</strong>
+                    <span>${item.c}</span>
+                </div>
+            `).join('');
+
+            resContainer.style.display = 'block';
+        }
+
+        function volarA(lng, lat, nombre, cat) {
+            document.getElementById('search-results').style.display = 'none';
+            document.getElementById('input-search').value = nombre;
+
+            map.flyTo({
+                center: [lng, lat],
+                zoom: 17.5,
+                pitch: 68,
+                bearing: -15,
+                essential: true
+            });
+
+            new maplibregl.Popup()
+                .setLngLat([lng, lat])
+                .setHTML(`
+                    <div class="popup-title">${nombre}</div>
+                    <div class="popup-tag">${cat}</div>
+                    <div class="popup-val">📍 <strong>Ubicación:</strong> Tacuarembó Urbana</div>
+                `)
+                .addTo(map);
+        }
+    </script>
+</body>
+</html>
