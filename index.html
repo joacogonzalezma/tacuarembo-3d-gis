@@ -5,47 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tacuarembó 3D GIS - Diagnóstico e Inteligencia Territorial</title>
 
-    <!--
-    ╔══════════════════════════════════════════════════════════════════════════════╗
-    ║  GUÍA RÁPIDA DE ESTE ARCHIVO                                                 ║
-    ╠══════════════════════════════════════════════════════════════════════════════╣
-    ║  El archivo tiene 3 bloques: CSS (estilos), HTML (paneles) y JS (lógica).    ║
-    ║                                                                              ║
-    ║  LA INTRO ESTÁ REPARTIDA EN LOS 3 BLOQUES. Cada pedazo está encerrado        ║
-    ║  entre marcas para que lo encuentres fácil:                                  ║
-    ║                                                                              ║
-    ║        ★★★ INTRO · INICIO ★★★   ......   ★★★ INTRO · FIN ★★★                ║
-    ║                                                                              ║
-    ║  Buscá "INTRO" (Ctrl+F) y vas a saltar por todos los pedazos.                ║
-    ╚══════════════════════════════════════════════════════════════════════════════╝
-    -->
-
-    <!-- MapLibre GL JS: la librería que dibuja el mapa 3D (hoja de estilos + script) -->
+    <!-- MapLibre GL JS -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 
-    <!-- PMTiles: permite leer los archivos .pmtiles directamente desde el repositorio, sin servidor de mapas -->
+    <!-- PMTiles Protocol -->
     <script src="https://unpkg.com/pmtiles@2.11.0/dist/index.js"></script>
 
     <style>
-        /* ═══════════════════════════════════════════════════════════════
-           ESTILOS BASE
-           Fondo verde oscuro, tipografía del sistema y mapa a pantalla completa.
-           overflow:hidden evita que aparezcan barras de scroll.
-           ═══════════════════════════════════════════════════════════════ */
         body { margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #101f16; color: #f5efe3; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
 
-
-        /* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-           ★★★ INTRO · INICIO (parte 1 de 3: ESTILOS CSS)                   ★
-           ★ Todo lo que sigue hasta "INTRO · FIN (CSS)" existe solo para   ★
-           ★ la introducción: pantalla de carga, título, viñeta, barras     ★
-           ★ de cine y botón de saltar.                                     ★
-           ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
-
-        /* --- Pantalla de carga: tapa todo el mapa mientras se descargan los datos.
-               Cuando está lista se le agrega la clase "hidden" y se desvanece. --- */
+        /* ============== PANTALLA DE CARGA ============== */
         #loading-screen {
             position: fixed; inset: 0; background: #101f16; z-index: 100;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -54,14 +25,10 @@
         #loading-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
         .loading-title { font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #f5efe3; margin-bottom: 6px; }
         .loading-sub { font-size: 12px; color: #b8c9b3; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 28px; }
-        /* Barra de progreso: el JS va cambiando el ancho de .loading-bar-fill de 0% a 100% */
         .loading-bar-track { width: 220px; height: 3px; background: #2a4433; border-radius: 2px; overflow: hidden; }
         .loading-bar-fill { height: 100%; width: 0%; background: #e58a3f; transition: width 0.3s ease; }
 
-        /* --- Efectos de intro hechos solo con CSS (no cargan al mapa, por eso son livianos) --- */
-
-        /* Título grande "Tacuarembó" que aparece y desaparece en medio del vuelo.
-           Empieza invisible (opacity 0); el JS le agrega/quita la clase "show". */
+        /* ============== EFECTOS DE INTRO (solo CSS: no cargan el mapa) ============== */
         #intro-title {
             position: fixed; inset: 0; z-index: 50;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -72,16 +39,12 @@
         .intro-title-main { font-size: 46px; font-weight: 700; letter-spacing: 2px; color: #f5efe3; }
         .intro-title-sub { font-size: 13px; color: #d9c9a3; margin-top: 8px; letter-spacing: 0.5px; }
 
-        /* Viñeta: oscurece suavemente los bordes de la pantalla (efecto cinematográfico).
-           Solo se ve cuando el <body> tiene la clase "intro". */
         #vignette-overlay {
             position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 1.2s ease;
             background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.4) 100%);
         }
         body.intro #vignette-overlay { opacity: 1; }
 
-        /* Barras negras arriba y abajo (formato de película).
-           Por defecto están fuera de la pantalla; con body.intro se deslizan hacia adentro. */
         .letterbox {
             position: fixed; left: 0; right: 0; height: 9vh; background: #000; z-index: 60;
             pointer-events: none; transition: transform 1s ease;
@@ -90,7 +53,6 @@
         .letterbox.bottom { bottom: 0; transform: translateY(100%); }
         body.intro .letterbox { transform: none; }
 
-        /* Botón "Saltar intro": solo visible mientras dura la intro */
         #btn-skip {
             position: fixed; bottom: calc(9vh + 14px); right: 18px; z-index: 70; display: none;
             background: rgba(21, 43, 30, 0.9); border: 1px solid rgba(255,255,255,0.18); color: #f5efe3;
@@ -99,43 +61,27 @@
         #btn-skip:hover { background: #c9712f; }
         body.intro #btn-skip { display: block; }
 
-        /* Durante la intro la interfaz (panel, cuadrante negro y botones de zoom) está oculta.
-           Cuando termina, se quita la clase "intro" del body y todo aparece con un fundido. */
+        /* Durante la intro la UI está oculta; al terminar aparece con un fundido */
         body.intro .panel,
         body.intro .reticle-box,
         body.intro .maplibregl-ctrl-top-right { opacity: 0; pointer-events: none; }
-        body.intro .panel { transform: translateX(-14px); }   /* el panel entra deslizándose desde la izquierda */
+        body.intro .panel { transform: translateX(-14px); }
         .maplibregl-ctrl-top-right { transition: opacity 0.7s ease; }
 
-        /* ★★★ INTRO · FIN (parte 1 de 3: ESTILOS CSS) ★★★ */
-        /* Nota: las propiedades "transition" del .panel y del .reticle-box (más abajo)
-           también sirven para el fundido de la intro. */
-
-
-        /* ═══════════════════════════════════════════════════════════════
-           PANEL LATERAL PRINCIPAL
-           Caja verde a la izquierda con título, buscador, métricas y leyenda.
-           (Sin "backdrop-filter": el desenfoque sobre el mapa en movimiento es
-           pesado y hacía trabarse la app.)
-           ═══════════════════════════════════════════════════════════════ */
+        /* Panel Lateral Principal (sin backdrop-filter: el desenfoque sobre WebGL en movimiento es caro) */
         .panel {
             position: absolute; top: 15px; left: 15px;
             background: rgba(21, 43, 30, 0.94);
             padding: 20px 24px; border-radius: 14px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
             z-index: 10; width: 320px; border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: opacity 0.7s ease, transform 0.7s ease;   /* ← usado por el fundido de la intro */
+            transition: opacity 0.7s ease, transform 0.7s ease;
         }
         .panel h1 { margin: 0 0 6px 0; font-size: 20px; color: #f5efe3; font-weight: 700; letter-spacing: -0.5px; }
         .panel p { margin: 0 0 16px 0; font-size: 12px; color: #b8c9b3; line-height: 1.4; }
 
-        /* Títulos de sección en naranja (ej. "BUSCADOR DE LUGARES") */
         .section-title { font-size: 11px; font-weight: 700; color: #e58a3f; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; display: block; }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           BUSCADOR DE LUGARES
-           Caja de texto + lista desplegable de resultados.
-           ═══════════════════════════════════════════════════════════════ */
+        /* Buscador */
         .search-box { position: relative; margin-bottom: 16px; }
         .search-box input {
             width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #3e5d49;
@@ -143,7 +89,6 @@
         }
         .search-box input:focus { border-color: #e58a3f; box-shadow: 0 0 0 2px rgba(229, 138, 63, 0.25); }
 
-        /* Lista de resultados: aparece debajo del input (empieza oculta, display:none) */
         .search-results {
             position: absolute; top: 100%; left: 0; right: 0; background: #152b1e; border: 1px solid #3e5d49;
             border-radius: 8px; max-height: 180px; overflow-y: auto; z-index: 20; margin-top: 4px; display: none;
@@ -153,22 +98,13 @@
         .search-item strong { display: block; color: #f5efe3; }
         .search-item span { font-size: 10px; color: #b8c9b3; }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           TARJETAS DE MÉTRICAS (Edificios, Árboles, Ratio verde/gris)
-           Grilla de 2 columnas.
-           ═══════════════════════════════════════════════════════════════ */
+        /* Dashboard de Métricas */
         .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .metric-card { background: #152b1e; padding: 10px 12px; border-radius: 8px; border: 1px solid #3e5d49; }
         .metric-val { font-size: 18px; font-weight: 700; color: #e58a3f; margin-top: 2px; font-variant-numeric: tabular-nums; }
         .metric-lbl { font-size: 10px; color: #b8c9b3; text-transform: uppercase; font-weight: 600; }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           INTERRUPTORES (switches) de encendido/apagado
-           El checkbox real está oculto; se dibuja un "slider" redondo que se pone
-           naranja y desplaza la bolita cuando está tildado.
-           ═══════════════════════════════════════════════════════════════ */
+        /* Switches */
         .toggle-container {
             display: flex; align-items: center; justify-content: space-between; background: #152b1e;
             padding: 10px 14px; border-radius: 8px; border: 1px solid #3e5d49; margin-bottom: 16px;
@@ -181,31 +117,18 @@
         input:checked + .slider-round { background-color: #e58a3f; }
         input:checked + .slider-round:before { transform: translateX(18px); }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           CUADRANTE NEGRO (retícula)
-           Marco negro sobre el mapa. Solo se cuentan edificios y árboles
-           que están DENTRO de este marco. No captura clics (pointer-events: none).
-           ═══════════════════════════════════════════════════════════════ */
+        /* Marco Negro de Cuadrante para Conteo */
         .reticle-box {
             position: absolute; top: 65px; bottom: 65px; right: 65px; left: 400px;
             border: 4px solid #000000; border-radius: 12px; pointer-events: none; z-index: 5;
-            transition: opacity 0.7s ease;   /* ← usado por el fundido de la intro */
+            transition: opacity 0.7s ease;
         }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           LEYENDA DE ALTURA
-           Barra de degradado que coincide con los colores de los edificios.
-           ═══════════════════════════════════════════════════════════════ */
+        /* Leyenda */
         .leyenda { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #b8c9b3; }
         .gradient-bar { height: 8px; width: 100%; border-radius: 4px; background: linear-gradient(to right, #e8dfc9, #d4b585, #b0764a, #7c4a2d); margin-top: 4px; }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           POPUPS DE MAPLIBRE (globitos que salen al hacer clic)
-           Se pinta el globo y la "colita" con los colores de la app.
-           ═══════════════════════════════════════════════════════════════ */
+        /* MapLibre Popup Custom */
         .maplibregl-popup-content {
             background: #152b1e; color: #f5efe3; padding: 16px; border-radius: 12px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: system-ui, sans-serif; border: 1px solid #3e5d49; max-width: 260px;
@@ -220,47 +143,30 @@
         .popup-val strong { color: #f5efe3; }
     </style>
 </head>
-
-<!-- ★ INTRO: la clase "intro" en el <body> es el "interruptor" de la introducción.
-       Mientras esté puesta: se ven las barras de cine y la viñeta, y la interfaz está oculta.
-       El JS se la quita al terminar la intro (función finalizarIntro). -->
 <body class="intro">
 
-    <!-- ★★★ INTRO · INICIO (parte 2 de 3: HTML de la intro) ★★★ -->
-
-    <!-- Pantalla de carga con barra de progreso (tapa el mapa mientras se descargan los datos) -->
     <div id="loading-screen">
         <div class="loading-title">TACUAREMBÓ 3D GIS</div>
         <div class="loading-sub">Cargando gemelo digital territorial</div>
         <div class="loading-bar-track"><div id="loading-bar-fill" class="loading-bar-fill"></div></div>
     </div>
 
-    <!-- Título que aparece en medio del vuelo de cámara -->
     <div id="intro-title">
         <div class="intro-title-main">Tacuarembó</div>
         <div class="intro-title-sub">Gemelo digital 3D · Diagnóstico territorial</div>
     </div>
 
-    <!-- ★★★ INTRO · FIN (parte 2a: pantalla de carga y título) ★★★
-         (más abajo, después del mapa, están la viñeta, las barras y el botón de saltar) -->
-
-
-    <!-- ═══════════════════════════════════════════════════════════════
-         PANEL LATERAL (interfaz principal de la app)
-         ═══════════════════════════════════════════════════════════════ -->
     <div class="panel">
         <h1>Tacuarembó 3D GIS</h1>
         <p><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong></p>
         <p>Gemelo digital 3D integrando huellas de <strong>Overture Maps</strong> con elevaciones <strong>LiDAR (IDE Uy)</strong> capturadas por último vuelo con cámara <strong>UltraCam Eagle Prime</strong> (10 cm).</p>
 
-        <!-- Buscador: cada vez que se escribe se llama a buscarLugar() (ver JS) -->
         <span class="section-title">🔍 Buscador de Lugares / POIs</span>
         <div class="search-box">
             <input type="text" id="input-search" placeholder="Ej. Plaza, Hospital, Escuela, Comercio..." oninput="buscarLugar(this.value)" autocomplete="off">
             <div id="search-results" class="search-results"></div>
         </div>
 
-        <!-- Métricas: los números (m-edificios, m-arboles, m-ratio) los rellena actualizarMetricas() -->
         <span class="section-title">📊 Diagnóstico en Cuadrante</span>
         <div class="metrics-grid">
             <div class="metric-card">
@@ -271,7 +177,6 @@
                 <div class="metric-lbl">Árboles 3D</div>
                 <div id="m-arboles" class="metric-val" style="color: #4ade80;">0</div>
             </div>
-            <!-- Interruptor para mostrar/ocultar los árboles 3D -->
             <div class="metric-card" style="display: flex; flex-direction: column; justify-content: center;">
                 <div class="metric-lbl" style="margin-bottom: 6px;">Arboles</div>
                 <label class="switch">
@@ -285,7 +190,6 @@
             </div>
         </div>
 
-        <!-- Interruptor de la vista "Densidad de árboles por cuadra" (mapa de semáforo por manzana) -->
         <div class="toggle-container">
             <span class="toggle-label">🌳 Densidad de arboles por cuadra</span>
             <label class="switch">
@@ -294,7 +198,6 @@
             </label>
         </div>
 
-        <!-- Leyenda de colores según la altura de los edificios -->
         <div>
             <span class="section-title">🏢 Escala de Altura (Metros)</span>
             <div class="gradient-bar"></div>
@@ -302,120 +205,69 @@
         </div>
     </div>
 
-    <!-- El mapa: MapLibre dibuja acá adentro (ocupa toda la pantalla) -->
     <div id="map"></div>
-
-    <!-- Cuadrante negro: define la zona donde se cuentan edificios y árboles -->
     <div id="reticle-box" class="reticle-box"></div>
-
-    <!-- ★★★ INTRO · INICIO (parte 2b de 3: viñeta, barras de cine y botón de saltar) ★★★ -->
-    <div id="vignette-overlay"></div>            <!-- bordes oscuros -->
-    <div class="letterbox top"></div>            <!-- barra negra superior -->
-    <div class="letterbox bottom"></div>         <!-- barra negra inferior -->
+    <div id="vignette-overlay"></div>
+    <div class="letterbox top"></div>
+    <div class="letterbox bottom"></div>
     <button id="btn-skip" onclick="saltarIntro()">Saltar intro (Esc)</button>
-    <!-- ★★★ INTRO · FIN (parte 2 de 3: HTML de la intro) ★★★ -->
-
 
     <script>
-        /* ═══════════════════════════════════════════════════════════════
-           1. CONFIGURACIÓN BASE
-           Registra el protocolo "pmtiles://" y define la vista del mapa.
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Le enseña a MapLibre a leer archivos .pmtiles (las direcciones "pmtiles://archivo.pmtiles")
+        // ================== CONFIGURACIÓN BASE ==================
         const protocol = new pmtiles.Protocol();
         maplibregl.addProtocol("pmtiles", protocol.tile);
 
-        // Mapa base gris claro de CARTO (calles, nombres). Sobre él se apilan tus capas.
         const STYLE_MAPA = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
-        // Encuadre FINAL (el mismo del index original). Es donde queda la cámara después de la intro
-        // y desde donde se usa la app. El mapa ARRANCA acá, escondido detrás de la pantalla de carga,
-        // para que los tiles de este encuadre ya estén descargados cuando empiece la intro.
+        // Encuadre final (el mismo del index original). El mapa ARRANCA acá, detrás de la pantalla
+        // de carga, para que los tiles del encuadre final ya estén descargados cuando empiece la intro.
         const FINAL_VIEW = { center: [-55.9811, -31.7133], zoom: 15.8, pitch: 62, bearing: -22 };
-
-
-        // ★★★ INTRO · INICIO (parte 3 de 3: JAVASCRIPT — configuración de la intro) ★★★
-
-        // Plano aéreo INICIAL de la intro: más alto (zoom 13.2), casi vertical (pitch 20),
-        // y corrido hacia el noreste, para que el vuelo "recorra" la ciudad hasta llegar al encuadre final.
+        // Plano aéreo inicial: más alto y corrido, para que el vuelo "recorra" la ciudad.
         const INTRO_VIEW = {
             center: [FINAL_VIEW.center[0] + 0.018, FINAL_VIEW.center[1] + 0.012],
             zoom: 13.2, pitch: 20, bearing: 18
         };
-        // Duración del vuelo en milisegundos (6500 = 6,5 segundos). Cambiá este número para acortar o alargar la intro.
         const INTRO_DURATION = 6500;
-        // Luz "normal" con la que queda el mapa al terminar la intro (blanca, intensidad media)
         const LUZ_DEFAULT = { anchor: 'viewport', color: '#ffffff', intensity: 0.5, position: [1.15, 210, 30] };
-        // ★★★ INTRO · FIN (configuración de la intro) ★★★
 
+        let listaPois = [];
+        let resultadosBusqueda = [];
+        let introRunning = false;
+        let metricasTimer = null;
+        let luzToken = 0;
+        let ultimoConteoArboles = 0;
 
-        // Variables de estado (memoria de la app)
-        let listaPois = [];              // lugares cargados desde pois.json
-        let resultadosBusqueda = [];     // últimos resultados mostrados en el buscador
-        let introRunning = false;        // ★ INTRO: true mientras la intro está en marcha
-        let metricasTimer = null;        // temporizador para no recalcular métricas demasiado seguido
-        let luzToken = 0;                // ★ INTRO: identificador para poder cancelar la animación de luz
-        let ultimoConteoArboles = 0;     // último conteo de árboles (se conserva si se apagan los árboles)
-
-        // Crea el mapa. Arranca ya en el encuadre final (FINAL_VIEW).
         const map = new maplibregl.Map({
             container: 'map',
             style: STYLE_MAPA,
             center: FINAL_VIEW.center,
             zoom: FINAL_VIEW.zoom,
-            pitch: FINAL_VIEW.pitch,      // inclinación 3D
-            bearing: FINAL_VIEW.bearing,  // orientación
-            antialias: true               // bordes suaves
+            pitch: FINAL_VIEW.pitch,
+            bearing: FINAL_VIEW.bearing,
+            antialias: true
         });
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           2. UTILIDADES
-           Funciones chicas que se usan en varios lugares.
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Curva de aceleración suave: arranca lento, acelera en el medio y frena al final.
-        // (La usan el vuelo de cámara y la animación de luz de la intro.)
+        // ================== UTILIDADES ==================
         function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-        // Interpolación lineal: devuelve un valor entre a y b según t (0 = a, 1 = b)
         function lerp(a, b, t) { return a + (b - a) * t; }
-        // Convierte caracteres especiales (<, >, &, comillas) en texto seguro para meter en HTML.
-        // Evita que un nombre raro rompa el popup o el buscador.
         function escapeHTML(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
+        // ================== INTRO (liviana) ==================
+        // Solo se anima: la cámara (un flyTo), la luz (un uniform) y overlays CSS.
+        // Las capas de edificios y árboles NO se animan: aparecen con su altura real desde el primer frame.
 
-        /* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-           ★★★ INTRO · INICIO (parte 3 de 3: JAVASCRIPT — funciones)        ★
-           ★                                                                ★
-           ★ Cómo funciona la intro, paso a paso:                           ★
-           ★  1. La pantalla de carga tapa el mapa y descarga los tiles.    ★
-           ★  2. Cuando están listos → iniciarIntro(): se ubica la cámara   ★
-           ★     en el plano aéreo, se destapa el mapa y arranca el vuelo.  ★
-           ★  3. Durante el vuelo: aparece el título y la luz va de tono    ★
-           ★     azulado (amanecer) a luz normal.                           ★
-           ★  4. Al terminar → finalizarIntro(): aparece la interfaz y se   ★
-           ★     retiran las barras y la viñeta.                            ★
-           ★                                                                ★
-           ★ Es liviana a propósito: solo se anima la cámara, la luz y     ★
-           ★ efectos CSS. Los edificios y árboles NO se animan: aparecen   ★
-           ★ con su altura real desde el primer cuadro.                    ★
-           ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
-
-        // Anima la luz del mapa: empieza con un tono azulado y tenue ("amanecer") y termina en la luz normal.
         function animarLuz(duration) {
-            const token = ++luzToken;                 // ficha única de esta animación
+            const token = ++luzToken;
             const start = performance.now();
-            const alba = { color: [196, 212, 235], intensity: 0.22, azimuth: 70, polar: 70 };   // luz inicial
-            const fin = LUZ_DEFAULT;                  // luz final
+            const alba = { color: [196, 212, 235], intensity: 0.22, azimuth: 70, polar: 70 };
+            const fin = LUZ_DEFAULT;
             const finRGB = [255, 255, 255];
             function step(now) {
-                if (token !== luzToken) return;       // si alguien canceló (saltó la intro), se corta acá
-                const t = Math.min(1, (now - start) / duration);   // progreso de 0 a 1
+                if (token !== luzToken) return; // cancelada (intro saltada)
+                const t = Math.min(1, (now - start) / duration);
                 const e = easeInOutCubic(t);
-                // Mezcla el color inicial con el final y lo convierte a formato #rrggbb
                 const hex = '#' + [0, 1, 2].map(i => Math.round(lerp(alba.color[i], finRGB[i], e)).toString(16).padStart(2, '0')).join('');
                 try {
                     map.setLight({
@@ -424,27 +276,23 @@
                         position: [1.15, lerp(alba.azimuth, fin.position[1], e), lerp(alba.polar, fin.position[2], e)]
                     });
                 } catch (err) { /* setLight no soportado */ }
-                if (t < 1) requestAnimationFrame(step);   // sigue hasta completar el 100%
+                if (t < 1) requestAnimationFrame(step);
             }
             requestAnimationFrame(step);
         }
 
-        // Fija la luz final de golpe y cancela cualquier animación de luz en curso
         function fijarLuzFinal() {
-            luzToken++; // invalida la animación anterior
+            luzToken++; // cancela cualquier animación en curso
             try { map.setLight(LUZ_DEFAULT); } catch (err) {}
         }
 
-        // Muestra el título "Tacuarembó" a los 0,3 s y lo oculta a los 3,6 s
         function mostrarTitulo() {
             const el = document.getElementById('intro-title');
             setTimeout(() => el.classList.add('show'), 300);
             setTimeout(() => el.classList.remove('show'), 3600);
         }
 
-        // El vuelo de cámara: un solo movimiento del plano aéreo (INTRO_VIEW) al encuadre final (FINAL_VIEW).
-        // "curve" controla cuánto se aleja la cámara en el trayecto (efecto de sobrevuelo).
-        // Devuelve una promesa que se cumple cuando el vuelo termina.
+        // Un solo movimiento de cámara: del plano aéreo al encuadre final, con "curve" para el sobrevuelo.
         function volarIntro() {
             return new Promise(resolve => {
                 map.flyTo({
@@ -452,60 +300,45 @@
                     duration: INTRO_DURATION, curve: 1.6, easing: easeInOutCubic, essential: true
                 });
                 map.once('moveend', () => resolve());
-                setTimeout(resolve, INTRO_DURATION + 1000); // red de seguridad: si algo falla, igual continúa
+                setTimeout(resolve, INTRO_DURATION + 1000); // red de seguridad
             });
         }
 
-        // ▶ ARRANQUE de la intro (se llama cuando los datos ya están descargados)
         async function iniciarIntro() {
             introRunning = true;
-            map.jumpTo(INTRO_VIEW); // ubica la cámara en el plano aéreo (la pantalla de carga todavía tapa el mapa)
-            document.getElementById('loading-screen').classList.add('hidden');   // destapa el mapa con un fundido
+            map.jumpTo(INTRO_VIEW); // la pantalla de carga todavía tapa el mapa
+            document.getElementById('loading-screen').classList.add('hidden');
             mostrarTitulo();
             animarLuz(INTRO_DURATION);
-            await volarIntro();      // espera a que termine el vuelo
+            await volarIntro();
             finalizarIntro();
         }
 
-        // ■ FINAL de la intro (se llama al terminar el vuelo, o al saltarla)
         function finalizarIntro() {
-            if (!introRunning) return;   // evita ejecutarse dos veces
+            if (!introRunning) return;
             introRunning = false;
             fijarLuzFinal();
             document.getElementById('intro-title').classList.remove('show');
-            document.body.classList.remove('intro'); // ← ACÁ aparece la interfaz y se retiran las barras y la viñeta
-            setTimeout(() => { const v = document.getElementById('vignette-overlay'); if (v) v.remove(); }, 1500);   // borra la viñeta del HTML
-            programarMetricas(400);      // calcula por primera vez los números del cuadrante
+            document.body.classList.remove('intro'); // la UI aparece, se retiran las barras y la viñeta
+            setTimeout(() => { const v = document.getElementById('vignette-overlay'); if (v) v.remove(); }, 1500);
+            programarMetricas(400);
         }
 
-        // Saltar la intro (botón "Saltar intro" o tecla Esc): frena el vuelo y va directo al encuadre final
         function saltarIntro() {
             if (!introRunning) return;
             map.stop();
-            map.jumpTo(FINAL_VIEW);   // esto dispara 'moveend', que a su vez cierra la intro
+            map.jumpTo(FINAL_VIEW);
         }
 
-        // Tecla Esc = saltar intro
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') saltarIntro(); });
 
-        // ★★★ INTRO · FIN (parte 3 de 3: JavaScript — funciones) ★★★
-        // (El arranque de la intro se dispara desde la sección 3, en "map.on('load')": ver el bloque "INTRO · ESPERA DE DATOS")
-
-
-        /* ═══════════════════════════════════════════════════════════════
-           3. CARGA DE CAPAS
-           Cuando el mapa base termina de cargar ('load'), se agregan tus
-           4 archivos PMTiles como capas y se prepara el arranque de la intro.
-           Las capas se dibujan en el orden en que se agregan (la última queda arriba).
-           ═══════════════════════════════════════════════════════════════ */
+        // ================== CAPAS ==================
         map.on('load', () => {
-            // ★ INTRO: barra de progreso de la pantalla de carga (empieza en 15%)
             const fill = document.getElementById('loading-bar-fill');
             let pct = 15;
             fill.style.width = pct + '%';
 
-            // ── Capa 1: Parques y Plazas (polígonos verdes translúcidos + borde) ──
-            // Lee el archivo parques.pmtiles; 'source-layer' es el nombre de la capa DENTRO del archivo.
+            // 1. Parques y Plazas
             map.addSource('parques_source', { type: 'vector', url: 'pmtiles://parques.pmtiles' });
             map.addLayer({
                 id: 'parques-layer', type: 'fill', source: 'parques_source', 'source-layer': 'parques',
@@ -516,9 +349,7 @@
                 paint: { 'line-color': '#2e6b3f', 'line-width': 1.5 }
             });
 
-            // ── Capa 1b: Manzanas urbanas ("semáforo" de cobertura forestal) ──
-            // Empieza OCULTA (visibility: none); se muestra con el interruptor "Densidad de árboles por cuadra".
-            // El color depende del campo 'ratio_verde': rojo = casi sin árboles ... verde oscuro = mucha vegetación.
+            // 1b. Manzanas Urbanas (semáforo de cobertura forestal)
             map.addSource('manzanas_source', { type: 'vector', url: 'pmtiles://manzanas.pmtiles' });
             map.addLayer({
                 id: 'manzanas-layer', type: 'fill', source: 'manzanas_source', 'source-layer': 'manzanas',
@@ -526,11 +357,7 @@
                 paint: {
                     'fill-color': [
                         'interpolate', ['linear'], ['get', 'ratio_verde'],
-                        0.0, '#ef4444',    // rojo: déficit crítico
-                        1.0, '#f97316',    // naranja: baja vegetación
-                        3.5, '#eab308',    // amarillo: nivel medio
-                        7.0, '#22c55e',    // verde claro: buena vegetación
-                        15.0, '#15803d'    // verde oscuro: alta densidad forestal
+                        0.0, '#ef4444', 1.0, '#f97316', 3.5, '#eab308', 7.0, '#22c55e', 15.0, '#15803d'
                     ],
                     'fill-opacity': 0.65
                 }
@@ -541,9 +368,7 @@
                 paint: { 'line-color': '#101f16', 'line-width': 1.2, 'line-opacity': 0.6 }
             });
 
-            // ── Capa 2: Arbolado 3D ──
-            // Cada árbol se dibuja extruido (con volumen) según su campo 'altura_m'.
-            // El color va de verde claro (árboles bajos) a verde muy oscuro (árboles altos).
+            // 2. Arbolado 3D
             map.addSource('arboles_3d_source', { type: 'vector', url: 'pmtiles://arboles.pmtiles' });
             map.addLayer({
                 id: 'arboles-extruidos-3d', type: 'fill-extrusion', source: 'arboles_3d_source', 'source-layer': 'arboles',
@@ -558,9 +383,7 @@
                 }
             });
 
-            // ── Capa 3: Edificios 3D ──
-            // Igual que los árboles pero con tonos beige → marrón según la altura.
-            // Se agrega al final, así queda dibujada encima de las demás.
+            // 3. Edificios 3D
             map.addSource('edificios_3d_source', { type: 'vector', url: 'pmtiles://edificios.pmtiles' });
             map.addLayer({
                 id: 'edificios-extruidos-3d', type: 'fill-extrusion', source: 'edificios_3d_source', 'source-layer': 'edificios',
@@ -574,66 +397,44 @@
                     'fill-extrusion-opacity': 0.88
                 }
             });
-            pct = 40; fill.style.width = pct + '%';   // ★ INTRO: barra de carga al 40% (capas ya registradas)
+            pct = 40; fill.style.width = pct + '%';
 
-            // Carga la lista de lugares (pois.json) para el buscador. Si falla, solo avisa en consola.
+            // POIs para el buscador
             fetch('pois.json').then(r => r.json()).then(data => { if (data) listaPois = data; }).catch(e => console.log('Aviso POIs JSON:', e));
 
-            // Botones de zoom y brújula (arriba a la derecha)
             map.addControl(new maplibregl.NavigationControl());
 
-            // Las métricas se recalculan solo cuando el mapa queda quieto ('idle'), nunca durante el movimiento.
-            // Así la app no se traba al navegar.
+            // Las métricas se calculan solo cuando el mapa queda quieto (nunca durante el movimiento)
             map.on('idle', () => programarMetricas(200));
 
-
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-            // ★★★ INTRO · INICIO — ESPERA DE DATOS Y DISPARO DE LA INTRO      ★
-            // ★ Espera (máximo 12 s) a que los tiles del encuadre final estén ★
-            // ★ descargados, va llenando la barra de carga, y cuando está     ★
-            // ★ todo listo llama a iniciarIntro().                            ★
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-
-            // Fuentes que se esperan. La de manzanas está oculta y no se espera.
+            // Esperar (con tope) a que el encuadre final tenga sus tiles, así la intro arranca con datos reales.
+            // La fuente de manzanas está oculta y no se espera.
             const claves = ['edificios_3d_source', 'arboles_3d_source', 'parques_source'];
             let arrancada = false;
             function arrancar() {
-                if (arrancada) return;          // evita arrancar dos veces
+                if (arrancada) return;
                 arrancada = true;
-                clearInterval(poll);            // deja de consultar
-                fill.style.width = '100%';      // barra completa
-                setTimeout(iniciarIntro, 350);  // pequeña pausa y arranca la intro
+                clearInterval(poll);
+                fill.style.width = '100%';
+                setTimeout(iniciarIntro, 350);
             }
             const t0 = performance.now();
-            // Cada 250 ms revisa cuántas fuentes ya cargaron y actualiza la barra (de 40% a 95%)
             const poll = setInterval(() => {
                 const listos = claves.filter(id => map.isSourceLoaded(id)).length;
                 fill.style.width = Math.max(pct, 40 + Math.round((listos / claves.length) * 55)) + '%';
-                if (listos === claves.length && map.loaded()) arrancar();       // todo cargado → arrancar
-                else if (performance.now() - t0 > 12000) arrancar();            // tope de 12 s: arranca igual
+                if (listos === claves.length && map.loaded()) arrancar();
+                else if (performance.now() - t0 > 12000) arrancar(); // tope de 12 s
             }, 250);
-
-            // ★★★ INTRO · FIN — ESPERA DE DATOS Y DISPARO DE LA INTRO ★★★
         });
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           4. MÉTRICAS DEL CUADRANTE
-           Cuenta cuántos edificios y árboles hay dentro del marco negro
-           y calcula el ratio verde/gris. Se ejecuta solo con el mapa quieto,
-           con "debounce" (pequeña espera) y sin contar dos veces los objetos
-           que quedan cortados entre dos tiles.
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Devuelve la primera coordenada [lng, lat] de una geometría (sirve para identificar un objeto)
+        // ================== MÉTRICAS DEL CUADRANTE ==================
+        // Solo con el mapa quieto ('idle'), con debounce, y deduplicando features partidos entre tiles.
         function primeraCoordenada(geom) {
             let c = geom && geom.coordinates;
             while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
             return Array.isArray(c) ? c : [0, 0];
         }
 
-        // Genera una "clave" única por objeto, para no contarlo dos veces si aparece en varios tiles.
-        // Usa su id si lo tiene; si no, combina altura + primera coordenada.
         function claveFeature(f) {
             if (f.id !== undefined && f.id !== null) return 'id:' + f.id;
             const p = f.properties || {};
@@ -642,14 +443,12 @@
             return 'g:' + (p.altura_m || 0) + '|' + c[0].toFixed(5) + ',' + c[1].toFixed(5);
         }
 
-        // Cuenta objetos únicos (sin repetidos) dentro de una lista
         function contarUnicos(features) {
             const set = new Set();
             for (let i = 0; i < features.length; i++) set.add(claveFeature(features[i]));
             return set.size;
         }
 
-        // Calcula el rectángulo del marco negro en píxeles, relativo al mapa
         function cajaReticulo() {
             const reticle = document.getElementById('reticle-box');
             if (!reticle) return undefined;
@@ -658,21 +457,17 @@
             return [[rect.left - canvas.left, rect.top - canvas.top], [rect.right - canvas.left, rect.bottom - canvas.top]];
         }
 
-        // Programa un recálculo de métricas con una pequeña espera. Si se pide varias veces seguidas,
-        // solo se ejecuta la última (así no se recalcula cientos de veces).
         function programarMetricas(delay) {
             clearTimeout(metricasTimer);
             metricasTimer = setTimeout(actualizarMetricas, delay == null ? 200 : delay);
         }
 
-        // Cuenta edificios y árboles dentro del marco y actualiza los números del panel
         function actualizarMetricas() {
-            if (introRunning) return;                                          // durante la intro no se calcula nada
-            if (document.getElementById('toggle-manzanas').checked) return;    // en la vista de manzanas se congelan
+            if (introRunning) return;
+            if (document.getElementById('toggle-manzanas').checked) return; // en vista de manzanas se congelan
             if (!map.getLayer('edificios-extruidos-3d')) return;
 
             const caja = cajaReticulo();
-            // Pregunta al mapa qué objetos de una capa se ven dentro del marco
             const consultar = (layer) => {
                 const opts = { layers: [layer] };
                 return caja ? map.queryRenderedFeatures(caja, opts) : map.queryRenderedFeatures(opts);
@@ -680,13 +475,12 @@
 
             const totalEdif = contarUnicos(consultar('edificios-extruidos-3d'));
 
-            // Si los árboles están apagados la capa no se puede consultar, así que se conserva el último conteo
+            // Con los árboles apagados la capa no se puede consultar: se conserva el último conteo
             if (document.getElementById('toggle-veg').checked && map.getLayer('arboles-extruidos-3d')) {
                 ultimoConteoArboles = contarUnicos(consultar('arboles-extruidos-3d'));
             }
             const totalArboles = ultimoConteoArboles;
 
-            // Ratio verde/gris = árboles / (edificios + árboles), en porcentaje
             const ratio = (totalEdif + totalArboles) > 0 ? Math.round((totalArboles / (totalEdif + totalArboles)) * 100) : 0;
 
             document.getElementById('m-edificios').textContent = totalEdif.toLocaleString();
@@ -694,13 +488,7 @@
             document.getElementById('m-ratio').textContent = ratio + '%';
         }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           5. INTERACCIÓN: CLICS Y POPUPS
-           Al hacer clic en un edificio o una manzana se abre un globito con sus datos.
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Clic en un edificio: muestra nombre, categoría, altura, pisos estimados y origen del dato de altura
+        // ================== INTERACCIÓN ==================
         map.on('click', 'edificios-extruidos-3d', (e) => {
             if (!e.features.length) return;
             const props = e.features[0].properties;
@@ -708,7 +496,7 @@
             const categoria = escapeHTML(props.poi_categoria || props.clase || 'Residencial / Servicio');
             const alturaNum = Number(props.altura_m) || 0;
             const altura = alturaNum ? alturaNum.toFixed(1) : '4.0';
-            const pisos = Math.max(1, Math.round(alturaNum / 3.5));   // se estima ~3,5 m por piso
+            const pisos = Math.max(1, Math.round(alturaNum / 3.5));
             const lidarStatus = props.altura_lidar ? '✅ Medida real con LiDAR (10cm)' : 'ℹ️ Estimada por modelo base';
 
             const content = `
@@ -720,12 +508,9 @@
             new maplibregl.Popup().setLngLat(e.lngLat).setHTML(content).addTo(map);
         });
 
-        // El cursor se vuelve "manito" al pasar sobre un edificio (indica que se puede clickear)
         map.on('mouseenter', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = ''; });
 
-        // Clic en una manzana (solo funciona con la vista de densidad activada):
-        // muestra su número, cantidad de árboles, edificios y % de cobertura verde
         map.on('click', 'manzanas-layer', (e) => {
             if (!e.features.length) return;
             const props = e.features[0].properties;
@@ -744,14 +529,7 @@
             new maplibregl.Popup().setLngLat(e.lngLat).setHTML(content).addTo(map);
         });
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           6. INTERRUPTORES DE CAPAS
-           Prenden y apagan capas cambiando solo su visibilidad (instantáneo, sin animaciones).
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Interruptor "Arboles": muestra u oculta los árboles 3D
-        // (si la vista de manzanas está activa no hace nada, porque ahí los árboles ya están ocultos)
+        // Toggles instantáneos (sin animaciones: cambian solo la visibilidad de la capa)
         function toggleVegetacion(visible) {
             const manzanasChecked = document.getElementById('toggle-manzanas').checked;
             if (!manzanasChecked && map.getLayer('arboles-extruidos-3d')) {
@@ -759,10 +537,6 @@
             }
         }
 
-        // Interruptor "Densidad de árboles por cuadra":
-        //  - ACTIVADO: muestra las manzanas de colores y oculta edificios y árboles.
-        //  - DESACTIVADO: oculta las manzanas y restaura edificios y árboles
-        //    (los árboles solo si su interruptor propio sigue prendido).
         function toggleManzanas(visible) {
             const visibility = visible ? 'visible' : 'none';
             if (map.getLayer('manzanas-layer')) {
@@ -779,17 +553,10 @@
             }
         }
 
-
-        /* ═══════════════════════════════════════════════════════════════
-           7. BUSCADOR DE LUGARES (POIs)
-           Busca por nombre o categoría en pois.json (campos: n = nombre,
-           c = categoría, x = longitud, y = latitud) y vuela hasta el lugar elegido.
-           ═══════════════════════════════════════════════════════════════ */
-
-        // Se ejecuta cada vez que se escribe en el buscador: filtra y muestra hasta 5 resultados
+        // ================== BUSCADOR ==================
         function buscarLugar(q) {
             const resContainer = document.getElementById('search-results');
-            if (!q || q.length < 2) { resContainer.style.display = 'none'; return; }   // menos de 2 letras: no busca
+            if (!q || q.length < 2) { resContainer.style.display = 'none'; return; }
             const query = q.toLowerCase();
             resultadosBusqueda = listaPois.filter(item => {
                 const n = item.n || '';
@@ -797,7 +564,7 @@
                 return n.toLowerCase().includes(query) || c.toLowerCase().includes(query);
             }).slice(0, 5);
             if (resultadosBusqueda.length === 0) { resContainer.style.display = 'none'; return; }
-            // Al onclick se le pasa el número del resultado (no el texto): así los nombres con comillas no rompen el HTML
+            // Se pasa el índice (no el texto) al onclick: los nombres con comillas ya no rompen el HTML
             resContainer.innerHTML = resultadosBusqueda.map((item, i) => `
                 <div class="search-item" onclick="volarADesdeResultado(${i})">
                     <strong>${escapeHTML(item.n)}</strong>
@@ -807,13 +574,11 @@
             resContainer.style.display = 'block';
         }
 
-        // Toma el resultado clickeado (por su número) y vuela hasta él
         function volarADesdeResultado(i) {
             const item = resultadosBusqueda[i];
             if (item) volarA(item.x, item.y, item.n || '', item.c || '');
         }
 
-        // Vuela la cámara hasta el lugar (zoom cercano, bien inclinada) y abre un popup con su nombre
         function volarA(lng, lat, nombre, cat) {
             document.getElementById('search-results').style.display = 'none';
             document.getElementById('input-search').value = nombre;
