@@ -158,6 +158,38 @@
         .popup-tag { font-size: 10px; font-weight: 700; padding: 3px 8px; background: rgba(229, 138, 63, 0.22); color: #e58a3f; border-radius: 4px; display: inline-block; margin-bottom: 8px; text-transform: uppercase; }
         .popup-val { font-size: 12px; color: #d4dfd0; margin: 4px 0; line-height: 1.3; }
         .popup-val strong { color: #f5efe3; }
+
+        /* ============== CELULAR: el panel pasa a ser una hoja inferior plegable ============== */
+        .panel-cabecera { display: flex; align-items: center; justify-content: space-between; }
+        .panel-flecha { display: none; }
+        @media (max-width: 700px), (max-height: 520px) {
+            .panel {
+                top: auto; left: 0; right: 0; bottom: 0; width: auto; box-sizing: border-box;
+                border-radius: 16px 16px 0 0; border-width: 1px 0 0 0;
+                padding: 8px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+                max-height: 80vh; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
+            }
+            .panel::before { content: ""; display: block; width: 38px; height: 4px; border-radius: 2px; background: #3e5d49; margin: 0 auto 4px; }
+            .panel-cabecera { padding: 6px 0 10px; cursor: pointer; }
+            .panel h1 { font-size: 16px; margin: 0; }
+            .panel-flecha {
+                display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin: -6px -6px -6px 0;
+                background: none; border: 0; color: #e58a3f; font-size: 14px; cursor: pointer; transition: transform 0.25s ease;
+            }
+            .panel.abierto .panel-flecha { transform: rotate(180deg); }
+            .panel:not(.abierto) .solo-expandido { display: none; }
+            .metrics-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 0; }
+            .panel.abierto .metrics-grid { margin-bottom: 12px; }
+            .metric-card { padding: 7px 8px; }
+            .metric-lbl { font-size: 9px; }
+            .metric-val { font-size: 16px; }
+            .search-box input { font-size: 16px; } /* evita el zoom automatico de iPhone al escribir */
+            .search-results { position: static; margin-top: 6px; }
+            /* El recuadro de conteo ocupa la parte del mapa que queda visible sobre la hoja cerrada */
+            .reticle-box { top: 12px; left: 12px; right: 12px; bottom: calc(var(--alto-panel, 140px) + 12px); }
+            .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: var(--alto-panel, 140px); }
+            .intro-title-main { font-size: 30px; }
+        }
     </style>
 </head>
 <body class="intro">
@@ -183,17 +215,20 @@
         <div class="intro-title-sub">Gemelo digital 3D · Diagnóstico territorial</div>
     </div>
 
-    <div class="panel">
-        <h1>Tacuarembó 3D GIS</h1>
-        <p><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong></p>
+    <div class="panel" id="panel">
+        <div class="panel-cabecera" onclick="alternarPanel()">
+            <h1>Tacuarembó 3D GIS</h1>
+            <button type="button" id="panel-flecha" class="panel-flecha" aria-label="Mostrar u ocultar opciones" aria-expanded="false">▲</button>
+        </div>
+        <p class="solo-expandido"><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong></p>
 
-        <span class="section-title">🔍 Buscador de Lugares / POIs</span>
-        <div class="search-box">
+        <span class="section-title solo-expandido">🔍 Buscador de Lugares / POIs</span>
+        <div class="search-box solo-expandido">
             <input type="text" id="input-search" placeholder="Ej. Plaza, Hospital, Escuela, Comercio..." oninput="buscarLugar(this.value)" autocomplete="off">
             <div id="search-results" class="search-results"></div>
         </div>
 
-        <span class="section-title">📊 Diagnóstico en Cuadrante</span>
+        <span class="section-title solo-expandido">📊 Diagnóstico en Cuadrante</span>
         <div class="metrics-grid">
             <div class="metric-card">
                 <div class="metric-lbl">Edificios</div>
@@ -216,7 +251,7 @@
             </div>
         </div>
 
-        <div class="toggle-container">
+        <div class="toggle-container solo-expandido">
             <span class="toggle-label">🌳 Densidad de arboles por cuadra</span>
             <label class="switch">
                 <input type="checkbox" id="toggle-manzanas" onchange="toggleManzanas(this.checked)">
@@ -224,7 +259,7 @@
             </label>
         </div>
 
-        <div>
+        <div class="solo-expandido">
             <span class="section-title">🏢 Escala de Altura (Metros)</span>
             <div class="gradient-bar"></div>
             <div class="leyenda"><span>0 m</span><span>10 m</span><span>20 m</span><span>+35 m</span></div>
@@ -666,6 +701,7 @@
         function volarA(lng, lat, nombre, cat) {
             document.getElementById('search-results').style.display = 'none';
             document.getElementById('input-search').value = nombre;
+            alternarPanel(false);
             map.flyTo({ center: [lng, lat], zoom: 17.5, pitch: 68, bearing: -15, essential: true });
             new maplibregl.Popup()
                 .setLngLat([lng, lat])
@@ -675,6 +711,22 @@
                     <div class="popup-val">📍 <strong>Ubicación:</strong> Tacuarembó Urbana</div>
                 `)
                 .addTo(map);
+        }
+        // ================== PANEL (celular: hoja inferior plegable) ==================
+        const panelEl = document.getElementById('panel');
+        function alternarPanel(abrir) {
+            const abierto = (abrir === undefined) ? !panelEl.classList.contains('abierto') : abrir;
+            panelEl.classList.toggle('abierto', abierto);
+            document.getElementById('panel-flecha').setAttribute('aria-expanded', String(abierto));
+            if (!abierto) panelEl.scrollTop = 0;
+        }
+        // Se mide la altura del panel cerrado para ubicar el recuadro de conteo justo encima
+        if (window.ResizeObserver) {
+            new ResizeObserver(() => {
+                if (panelEl.classList.contains('abierto')) return;
+                document.documentElement.style.setProperty('--alto-panel', panelEl.offsetHeight + 'px');
+                solicitarMetricas();
+            }).observe(panelEl);
         }
     </script>
 </body>
