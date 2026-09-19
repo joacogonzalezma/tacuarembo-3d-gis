@@ -25,7 +25,18 @@
         #loading-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
         .loading-title { font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #f5efe3; margin-bottom: 6px; }
         .loading-sub { font-size: 12px; color: #b8c9b3; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 28px; }
-        .loading-bar-track { width: 220px; height: 3px; background: #2a4433; border-radius: 2px; overflow: hidden; }
+        .loading-action { position: relative; width: 220px; height: 48px; display: flex; align-items: center; justify-content: center; }
+        .loading-bar-track { width: 220px; height: 3px; background: #2a4433; border-radius: 2px; overflow: hidden; transition: opacity 0.4s ease; }
+        .loading-action.listo .loading-bar-track { opacity: 0; }
+        .btn-entrar {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, calc(-50% + 8px));
+            opacity: 0; visibility: hidden; white-space: nowrap;
+            background: transparent; color: #f5efe3; border: 1.5px solid #e58a3f; border-radius: 8px;
+            padding: 12px 36px; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 4px; cursor: pointer;
+            transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s, background 0.2s ease, color 0.2s ease, visibility 0s linear 0.2s;
+        }
+        .loading-action.listo .btn-entrar { opacity: 1; visibility: visible; transform: translate(-50%, -50%); }
+        .btn-entrar:hover, .btn-entrar:focus-visible { background: #e58a3f; color: #101f16; outline: none; }
         .loading-bar-fill { height: 100%; width: 0%; background: #e58a3f; transition: width 0.3s ease; }
 
         /* ============== EFECTOS DE INTRO (solo CSS: no cargan el mapa) ============== */
@@ -147,8 +158,11 @@
 
     <div id="loading-screen">
         <div class="loading-title">TACUAREMBÓ 3D GIS</div>
-        <div class="loading-sub">Cargando gemelo digital territorial</div>
-        <div class="loading-bar-track"><div id="loading-bar-fill" class="loading-bar-fill"></div></div>
+        <div id="loading-sub" class="loading-sub">Cargando gemelo digital territorial</div>
+        <div id="loading-action" class="loading-action">
+            <div class="loading-bar-track"><div id="loading-bar-fill" class="loading-bar-fill"></div></div>
+            <button id="btn-entrar" class="btn-entrar" onclick="entrar()" disabled>ENTRAR</button>
+        </div>
     </div>
 
     <div id="intro-title">
@@ -304,6 +318,21 @@
             });
         }
 
+        function mostrarBotonEntrar() {
+            document.getElementById('loading-sub').textContent = 'Gemelo digital listo';
+            document.getElementById('loading-action').classList.add('listo');
+            const b = document.getElementById('btn-entrar');
+            b.disabled = false;
+            b.focus(); // Enter o Espacio también entran
+        }
+
+        function entrar() {
+            const b = document.getElementById('btn-entrar');
+            if (b.disabled) return;
+            b.disabled = true;
+            iniciarIntro();
+        }
+
         async function iniciarIntro() {
             introRunning = true;
             map.jumpTo(INTRO_VIEW); // la pantalla de carga todavía tapa el mapa
@@ -429,7 +458,7 @@
                 arrancada = true;
                 clearInterval(poll);
                 fill.style.width = '100%';
-                setTimeout(iniciarIntro, 350);
+                setTimeout(mostrarBotonEntrar, 350);
             }
             const t0 = performance.now();
             const poll = setInterval(() => {
