@@ -186,9 +186,25 @@
             .search-box input { font-size: 16px; } /* evita el zoom automatico de iPhone al escribir */
             .search-results { position: static; margin-top: 6px; }
             /* El recuadro de conteo ocupa la parte del mapa que queda visible sobre la hoja cerrada */
-            .reticle-box { top: 12px; left: 12px; right: 12px; bottom: calc(var(--alto-panel, 140px) + 12px); }
+            /* Recuadro de conteo: una zona centrada en el mapa visible (sobre la hoja inferior).
+               Para achicarlo o agrandarlo se cambian --marco-x (margen lateral) y --marco-y (margen vertical, fraccion). */
+            :root { --marco-x: 18%; --marco-y: 0.18; }
+            .reticle-box {
+                border-width: 3px;
+                left: var(--marco-x); right: var(--marco-x);
+                top: calc((100% - var(--alto-panel, 140px)) * var(--marco-y));
+                bottom: calc(var(--alto-panel, 140px) + (100% - var(--alto-panel, 140px)) * var(--marco-y));
+            }
             .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { bottom: var(--alto-panel, 140px); }
             .intro-title-main { font-size: 30px; }
+        }
+
+        /* ============== CONTROL 3D: solo en pantallas tactiles (sin mouse no hay clic derecho) ============== */
+        .ctrl-3d { display: none; }
+        .ctrl-3d button { display: flex; align-items: center; justify-content: center; color: #333; font: 700 13px/1 'Segoe UI', system-ui, sans-serif; }
+        @media (pointer: coarse) {
+            .ctrl-3d { display: block; }
+            .maplibregl-ctrl-group button { width: 38px; height: 38px; }
         }
     </style>
 </head>
@@ -407,6 +423,48 @@
 
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') saltarIntro(); });
 
+        // ================== CONTROL 3D (solo pantallas tactiles) ==================
+        // Reemplaza al clic derecho del mouse: un boton 2D/3D para inclinar y dos botones para girar el mapa.
+        class Control3D {
+            onAdd(m) {
+                this._map = m;
+                const icono = (d) => '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+                const c = this._el = document.createElement('div');
+                c.className = 'maplibregl-ctrl maplibregl-ctrl-group ctrl-3d';
+
+                this._btnInclinar = this._boton('Cambiar entre vista 2D y 3D', '3D', () => {
+                    m.easeTo({ pitch: m.getPitch() > 20 ? 0 : FINAL_VIEW.pitch, duration: 600 });
+                });
+                const izq = this._boton('Girar a la izquierda', icono('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>'), () => {
+                    m.easeTo({ bearing: m.getBearing() - 30, duration: 400 });
+                });
+                const der = this._boton('Girar a la derecha', icono('<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'), () => {
+                    m.easeTo({ bearing: m.getBearing() + 30, duration: 400 });
+                });
+                c.append(this._btnInclinar, izq, der);
+
+                // El boton muestra la vista a la que se pasa al tocarlo: en 3D dice "2D" y en plano dice "3D"
+                this._actualizar = () => { this._btnInclinar.textContent = m.getPitch() > 20 ? '2D' : '3D'; };
+                m.on('pitch', this._actualizar);
+                this._actualizar();
+                return c;
+            }
+            _boton(etiqueta, contenido, alTocar) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.title = etiqueta;
+                b.setAttribute('aria-label', etiqueta);
+                b.innerHTML = contenido;
+                b.addEventListener('click', alTocar);
+                return b;
+            }
+            onRemove() {
+                this._map.off('pitch', this._actualizar);
+                this._el.remove();
+                this._map = undefined;
+            }
+        }
+
         // ================== CAPAS ==================
         map.on('load', () => {
             const fill = document.getElementById('loading-bar-fill');
@@ -487,6 +545,7 @@
             fetch('pois.json').then(r => r.json()).then(data => { if (data) listaPois = data; }).catch(e => console.log('Aviso POIs JSON:', e));
 
             map.addControl(new maplibregl.NavigationControl());
+            map.addControl(new Control3D(), 'top-right'); // se muestra solo en pantallas tactiles (ver CSS)
 
             // Métricas en vivo: mientras se mueve, cuando llegan tiles nuevos y un cálculo final al quedar quieto
             map.on('move', solicitarMetricas);
