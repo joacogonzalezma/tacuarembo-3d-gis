@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tacuarembó 3D - Diagnóstico e Inteligencia Territorial</title>
-    
+    <title>Tacuarembó 3D GIS - Diagnóstico e Inteligencia Territorial</title>
+
     <!-- MapLibre GL JS -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
@@ -13,216 +13,160 @@
     <script src="https://unpkg.com/pmtiles@2.11.0/dist/index.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #101f16; color: #f5efe3; }
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #101f16; color: #f5efe3; overflow: hidden; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        
-        /* Panel Lateral Principal */
-        .panel {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            background: rgba(21, 43, 30, 0.92);
-            padding: 20px 24px;
-            border-radius: 14px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            z-index: 10;
-            width: 320px;
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
 
+        /* ============== PANTALLA DE CARGA ============== */
+        #loading-screen {
+            position: fixed; inset: 0; background: #101f16; z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.9s ease, visibility 0.9s ease;
+        }
+        #loading-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+        .loading-title { font-size: 26px; font-weight: 700; letter-spacing: 1px; color: #f5efe3; margin-bottom: 6px; }
+        .loading-sub { font-size: 12px; color: #b8c9b3; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 28px; }
+        .loading-bar-track { width: 220px; height: 3px; background: #2a4433; border-radius: 2px; overflow: hidden; }
+        .loading-bar-fill { height: 100%; width: 0%; background: #e58a3f; transition: width 0.3s ease; }
+
+        /* ============== EFECTOS DE INTRO (solo CSS: no cargan el mapa) ============== */
+        #intro-title {
+            position: fixed; inset: 0; z-index: 50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: none; opacity: 0; transition: opacity 1s ease;
+            text-shadow: 0 4px 24px rgba(0,0,0,0.6);
+        }
+        #intro-title.show { opacity: 1; }
+        .intro-title-main { font-size: 46px; font-weight: 700; letter-spacing: 2px; color: #f5efe3; }
+        .intro-title-sub { font-size: 13px; color: #d9c9a3; margin-top: 8px; letter-spacing: 0.5px; }
+
+        #vignette-overlay {
+            position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 1.2s ease;
+            background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.4) 100%);
+        }
+        body.intro #vignette-overlay { opacity: 1; }
+
+        .letterbox {
+            position: fixed; left: 0; right: 0; height: 9vh; background: #000; z-index: 60;
+            pointer-events: none; transition: transform 1s ease;
+        }
+        .letterbox.top { top: 0; transform: translateY(-100%); }
+        .letterbox.bottom { bottom: 0; transform: translateY(100%); }
+        body.intro .letterbox { transform: none; }
+
+        #btn-skip {
+            position: fixed; bottom: calc(9vh + 14px); right: 18px; z-index: 70; display: none;
+            background: rgba(21, 43, 30, 0.9); border: 1px solid rgba(255,255,255,0.18); color: #f5efe3;
+            font-size: 11px; font-weight: 600; padding: 8px 12px; border-radius: 8px; cursor: pointer;
+        }
+        #btn-skip:hover { background: #c9712f; }
+        body.intro #btn-skip { display: block; }
+
+        /* Durante la intro la UI está oculta; al terminar aparece con un fundido */
+        body.intro .panel,
+        body.intro .reticle-box,
+        body.intro .maplibregl-ctrl-top-right { opacity: 0; pointer-events: none; }
+        body.intro .panel { transform: translateX(-14px); }
+        .maplibregl-ctrl-top-right { transition: opacity 0.7s ease; }
+
+        /* Panel Lateral Principal (sin backdrop-filter: el desenfoque sobre WebGL en movimiento es caro) */
+        .panel {
+            position: absolute; top: 15px; left: 15px;
+            background: rgba(21, 43, 30, 0.94);
+            padding: 20px 24px; border-radius: 14px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            z-index: 10; width: 320px; border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
         .panel h1 { margin: 0 0 6px 0; font-size: 20px; color: #f5efe3; font-weight: 700; letter-spacing: -0.5px; }
         .panel p { margin: 0 0 16px 0; font-size: 12px; color: #b8c9b3; line-height: 1.4; }
 
-        .section-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: #e58a3f;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 8px;
-            display: block;
-        }
+        .section-title { font-size: 11px; font-weight: 700; color: #e58a3f; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; display: block; }
 
         /* Buscador */
-        .search-box {
-            position: relative;
-            margin-bottom: 16px;
-        }
+        .search-box { position: relative; margin-bottom: 16px; }
         .search-box input {
-            width: 100%;
-            padding: 10px 12px;
-            border-radius: 8px;
-            border: 1px solid #3e5d49;
-            background: #152b1e;
-            color: #f5efe3;
-            font-size: 13px;
-            box-sizing: border-box;
-            outline: none;
-            transition: all 0.2s ease;
+            width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #3e5d49;
+            background: #152b1e; color: #f5efe3; font-size: 13px; box-sizing: border-box; outline: none; transition: all 0.2s ease;
         }
-        .search-box input:focus {
-            border-color: #e58a3f;
-            box-shadow: 0 0 0 2px rgba(229, 138, 63, 0.25);
-        }
+        .search-box input:focus { border-color: #e58a3f; box-shadow: 0 0 0 2px rgba(229, 138, 63, 0.25); }
 
-        /* Resultados Buscador Dropdown */
         .search-results {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: #152b1e;
-            border: 1px solid #3e5d49;
-            border-radius: 8px;
-            max-height: 180px;
-            overflow-y: auto;
-            z-index: 20;
-            margin-top: 4px;
-            display: none;
+            position: absolute; top: 100%; left: 0; right: 0; background: #152b1e; border: 1px solid #3e5d49;
+            border-radius: 8px; max-height: 180px; overflow-y: auto; z-index: 20; margin-top: 4px; display: none;
         }
-        .search-item {
-            padding: 8px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            border-bottom: 1px solid #3e5d49;
-        }
+        .search-item { padding: 8px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #3e5d49; }
         .search-item:hover { background: #c9712f; color: white; }
         .search-item strong { display: block; color: #f5efe3; }
         .search-item span { font-size: 10px; color: #b8c9b3; }
 
         /* Dashboard de Métricas */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-        .metric-card {
-            background: #152b1e;
-            padding: 10px 12px;
-            border-radius: 8px;
-            border: 1px solid #3e5d49;
-        }
-        .metric-val { font-size: 18px; font-weight: 700; color: #e58a3f; margin-top: 2px; }
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .metric-card { background: #152b1e; padding: 10px 12px; border-radius: 8px; border: 1px solid #3e5d49; }
+        .metric-val { font-size: 18px; font-weight: 700; color: #e58a3f; margin-top: 2px; font-variant-numeric: tabular-nums; }
         .metric-lbl { font-size: 10px; color: #b8c9b3; text-transform: uppercase; font-weight: 600; }
 
-        /* Switch Toggle Vegetacion */
+        /* Switches */
         .toggle-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: #152b1e;
-            padding: 10px 14px;
-            border-radius: 8px;
-            border: 1px solid #3e5d49;
-            margin-bottom: 16px;
+            display: flex; align-items: center; justify-content: space-between; background: #152b1e;
+            padding: 10px 14px; border-radius: 8px; border: 1px solid #3e5d49; margin-bottom: 16px;
         }
         .toggle-label { font-size: 12px; font-weight: 600; color: #f5efe3; }
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 38px;
-            height: 20px;
-        }
+        .switch { position: relative; display: inline-block; width: 38px; height: 20px; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider-round {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #3e5d49;
-            transition: .3s;
-            border-radius: 20px;
-        }
-        .slider-round:before {
-            position: absolute;
-            content: "";
-            height: 14px; width: 14px;
-            left: 3px; bottom: 3px;
-            background-color: white;
-            transition: .3s;
-            border-radius: 50%;
-        }
+        .slider-round { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #3e5d49; transition: .3s; border-radius: 20px; }
+        .slider-round:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider-round { background-color: #e58a3f; }
         input:checked + .slider-round:before { transform: translateX(18px); }
 
         /* Marco Negro de Cuadrante para Conteo */
         .reticle-box {
-            position: absolute;
-            top: 65px;
-            bottom: 65px;
-            right: 65px;
-            left: 400px;
-            border: 4px solid #000000;
-            border-radius: 12px;
-            pointer-events: none;
-            z-index: 5;
-        }
-
-        /* Slider Filtro */
-        .slider-container {
-            margin-bottom: 16px;
-        }
-        .slider-container input[type="range"] {
-            width: 100%;
-            cursor: pointer;
-            accent-color: #e58a3f;
+            position: absolute; top: 65px; bottom: 65px; right: 65px; left: 400px;
+            border: 4px solid #000000; border-radius: 12px; pointer-events: none; z-index: 5;
+            transition: opacity 0.7s ease;
         }
 
         /* Leyenda */
-        .leyenda {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 6px;
-            font-size: 10px;
-            color: #b8c9b3;
-        }
-        .gradient-bar {
-            height: 8px;
-            width: 100%;
-            border-radius: 4px;
-            background: linear-gradient(to right, #e8dfc9, #d4b585, #b0764a, #7c4a2d);
-            margin-top: 4px;
-        }
+        .leyenda { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 10px; color: #b8c9b3; }
+        .gradient-bar { height: 8px; width: 100%; border-radius: 4px; background: linear-gradient(to right, #e8dfc9, #d4b585, #b0764a, #7c4a2d); margin-top: 4px; }
 
         /* MapLibre Popup Custom */
         .maplibregl-popup-content {
-            background: #152b1e;
-            color: #f5efe3;
-            padding: 16px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            font-family: system-ui, sans-serif;
-            border: 1px solid #3e5d49;
-            max-width: 260px;
+            background: #152b1e; color: #f5efe3; padding: 16px; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); font-family: system-ui, sans-serif; border: 1px solid #3e5d49; max-width: 260px;
         }
         .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: #152b1e; }
         .maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: #152b1e; }
         .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: #152b1e; }
         .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: #152b1e; }
-        
         .popup-title { font-weight: 700; font-size: 15px; color: #f5efe3; margin-bottom: 4px; }
         .popup-tag { font-size: 10px; font-weight: 700; padding: 3px 8px; background: rgba(229, 138, 63, 0.22); color: #e58a3f; border-radius: 4px; display: inline-block; margin-bottom: 8px; text-transform: uppercase; }
         .popup-val { font-size: 12px; color: #d4dfd0; margin: 4px 0; line-height: 1.3; }
         .popup-val strong { color: #f5efe3; }
     </style>
 </head>
-<body>
+<body class="intro">
+
+    <div id="loading-screen">
+        <div class="loading-title">TACUAREMBÓ 3D GIS</div>
+        <div class="loading-sub">Cargando gemelo digital territorial</div>
+        <div class="loading-bar-track"><div id="loading-bar-fill" class="loading-bar-fill"></div></div>
+    </div>
+
+    <div id="intro-title">
+        <div class="intro-title-main">Tacuarembó</div>
+        <div class="intro-title-sub">Gemelo digital 3D · Diagnóstico territorial</div>
+    </div>
 
     <div class="panel">
         <h1>Tacuarembó 3D GIS</h1>
-        <p><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong><p>
+        <p><strong>Conteo de árboles de la ciudad y cálculo de densidad por manzana.</strong></p>
         <p>Gemelo digital 3D integrando huellas de <strong>Overture Maps</strong> con elevaciones <strong>LiDAR (IDE Uy)</strong> capturadas por último vuelo con cámara <strong>UltraCam Eagle Prime</strong> (10 cm).</p>
 
-        <!-- Buscador de Lugares / POIs -->
         <span class="section-title">🔍 Buscador de Lugares / POIs</span>
         <div class="search-box">
-            <input type="text" id="input-search" placeholder="Ej. Plaza, Hospital, Escuela, Comercio..." oninput="buscarLugar(this.value)">
+            <input type="text" id="input-search" placeholder="Ej. Plaza, Hospital, Escuela, Comercio..." oninput="buscarLugar(this.value)" autocomplete="off">
             <div id="search-results" class="search-results"></div>
         </div>
 
-        <!-- Dashboard Analítico de Métricas del Cuadrante -->
         <span class="section-title">📊 Diagnóstico en Cuadrante</span>
         <div class="metrics-grid">
             <div class="metric-card">
@@ -246,7 +190,6 @@
             </div>
         </div>
 
-        <!-- Interruptor Capa Manzanas -->
         <div class="toggle-container">
             <span class="toggle-label">🌳 Densidad de arboles por cuadra</span>
             <label class="switch">
@@ -255,193 +198,305 @@
             </label>
         </div>
 
-        <!-- Leyenda -->
         <div>
             <span class="section-title">🏢 Escala de Altura (Metros)</span>
             <div class="gradient-bar"></div>
-            <div class="leyenda">
-                <span>0 m</span>
-                <span>10 m</span>
-                <span>20 m</span>
-                <span>+35 m</span>
-            </div>
+            <div class="leyenda"><span>0 m</span><span>10 m</span><span>20 m</span><span>+35 m</span></div>
         </div>
     </div>
 
     <div id="map"></div>
     <div id="reticle-box" class="reticle-box"></div>
+    <div id="vignette-overlay"></div>
+    <div class="letterbox top"></div>
+    <div class="letterbox bottom"></div>
+    <button id="btn-skip" onclick="saltarIntro()">Saltar intro (Esc)</button>
 
     <script>
-        // Inicializar y Registrar Protocolo PMTiles en MapLibre GL JS
+        // ================== CONFIGURACIÓN BASE ==================
         const protocol = new pmtiles.Protocol();
         maplibregl.addProtocol("pmtiles", protocol.tile);
 
-        const TACUAREMBO_CENTER = [-55.9811, -31.7133];
         const STYLE_MAPA = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
+        // Encuadre final (el mismo del index original). El mapa ARRANCA acá, detrás de la pantalla
+        // de carga, para que los tiles del encuadre final ya estén descargados cuando empiece la intro.
+        const FINAL_VIEW = { center: [-55.9811, -31.7133], zoom: 15.8, pitch: 62, bearing: -22 };
+        // Plano aéreo inicial: más alto y corrido, para que el vuelo "recorra" la ciudad.
+        const INTRO_VIEW = {
+            center: [FINAL_VIEW.center[0] + 0.018, FINAL_VIEW.center[1] + 0.012],
+            zoom: 13.2, pitch: 20, bearing: 18
+        };
+        const INTRO_DURATION = 6500;
+        const LUZ_DEFAULT = { anchor: 'viewport', color: '#ffffff', intensity: 0.5, position: [1.15, 210, 30] };
+
         let listaPois = [];
+        let resultadosBusqueda = [];
+        let introRunning = false;
+        let metricasTimer = null;
+        let luzToken = 0;
+        let ultimoConteoArboles = 0;
 
         const map = new maplibregl.Map({
             container: 'map',
             style: STYLE_MAPA,
-            center: TACUAREMBO_CENTER,
-            zoom: 15.8,
-            pitch: 62,      // Inclinación 3D
-            bearing: -22,   // Orientación
+            center: FINAL_VIEW.center,
+            zoom: FINAL_VIEW.zoom,
+            pitch: FINAL_VIEW.pitch,
+            bearing: FINAL_VIEW.bearing,
             antialias: true
         });
 
+        // ================== UTILIDADES ==================
+        function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function escapeHTML(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // ================== INTRO (liviana) ==================
+        // Solo se anima: la cámara (un flyTo), la luz (un uniform) y overlays CSS.
+        // Las capas de edificios y árboles NO se animan: aparecen con su altura real desde el primer frame.
+
+        function animarLuz(duration) {
+            const token = ++luzToken;
+            const start = performance.now();
+            const alba = { color: [196, 212, 235], intensity: 0.22, azimuth: 70, polar: 70 };
+            const fin = LUZ_DEFAULT;
+            const finRGB = [255, 255, 255];
+            function step(now) {
+                if (token !== luzToken) return; // cancelada (intro saltada)
+                const t = Math.min(1, (now - start) / duration);
+                const e = easeInOutCubic(t);
+                const hex = '#' + [0, 1, 2].map(i => Math.round(lerp(alba.color[i], finRGB[i], e)).toString(16).padStart(2, '0')).join('');
+                try {
+                    map.setLight({
+                        anchor: 'viewport', color: hex,
+                        intensity: lerp(alba.intensity, fin.intensity, e),
+                        position: [1.15, lerp(alba.azimuth, fin.position[1], e), lerp(alba.polar, fin.position[2], e)]
+                    });
+                } catch (err) { /* setLight no soportado */ }
+                if (t < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        function fijarLuzFinal() {
+            luzToken++; // cancela cualquier animación en curso
+            try { map.setLight(LUZ_DEFAULT); } catch (err) {}
+        }
+
+        function mostrarTitulo() {
+            const el = document.getElementById('intro-title');
+            setTimeout(() => el.classList.add('show'), 300);
+            setTimeout(() => el.classList.remove('show'), 3600);
+        }
+
+        // Un solo movimiento de cámara: del plano aéreo al encuadre final, con "curve" para el sobrevuelo.
+        function volarIntro() {
+            return new Promise(resolve => {
+                map.flyTo({
+                    center: FINAL_VIEW.center, zoom: FINAL_VIEW.zoom, pitch: FINAL_VIEW.pitch, bearing: FINAL_VIEW.bearing,
+                    duration: INTRO_DURATION, curve: 1.6, easing: easeInOutCubic, essential: true
+                });
+                map.once('moveend', () => resolve());
+                setTimeout(resolve, INTRO_DURATION + 1000); // red de seguridad
+            });
+        }
+
+        async function iniciarIntro() {
+            introRunning = true;
+            map.jumpTo(INTRO_VIEW); // la pantalla de carga todavía tapa el mapa
+            document.getElementById('loading-screen').classList.add('hidden');
+            mostrarTitulo();
+            animarLuz(INTRO_DURATION);
+            await volarIntro();
+            finalizarIntro();
+        }
+
+        function finalizarIntro() {
+            if (!introRunning) return;
+            introRunning = false;
+            fijarLuzFinal();
+            document.getElementById('intro-title').classList.remove('show');
+            document.body.classList.remove('intro'); // la UI aparece, se retiran las barras y la viñeta
+            setTimeout(() => { const v = document.getElementById('vignette-overlay'); if (v) v.remove(); }, 1500);
+            programarMetricas(400);
+        }
+
+        function saltarIntro() {
+            if (!introRunning) return;
+            map.stop();
+            map.jumpTo(FINAL_VIEW);
+        }
+
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') saltarIntro(); });
+
+        // ================== CAPAS ==================
         map.on('load', () => {
-            // 1. Capa de Parques y Plazas
-            map.addSource('parques_source', {
-                type: 'vector',
-                url: 'pmtiles://parques.pmtiles'
-            });
+            const fill = document.getElementById('loading-bar-fill');
+            let pct = 15;
+            fill.style.width = pct + '%';
 
+            // 1. Parques y Plazas
+            map.addSource('parques_source', { type: 'vector', url: 'pmtiles://parques.pmtiles' });
             map.addLayer({
-                'id': 'parques-layer',
-                'type': 'fill',
-                'source': 'parques_source',
-                'source-layer': 'parques',
-                'paint': {
-                    'fill-color': '#4d9e63',
-                    'fill-opacity': 0.45
-                }
+                id: 'parques-layer', type: 'fill', source: 'parques_source', 'source-layer': 'parques',
+                paint: { 'fill-color': '#4d9e63', 'fill-opacity': 0.45 }
             });
-
             map.addLayer({
-                'id': 'parques-borde',
-                'type': 'line',
-                'source': 'parques_source',
-                'source-layer': 'parques',
-                'paint': {
-                    'line-color': '#2e6b3f',
-                    'line-width': 1.5
-                }
+                id: 'parques-borde', type: 'line', source: 'parques_source', 'source-layer': 'parques',
+                paint: { 'line-color': '#2e6b3f', 'line-width': 1.5 }
             });
 
-            // 1b. Capa de Manzanas Urbanas (Balance Cobertura Forestal - Semáforo)
-            map.addSource('manzanas_source', {
-                type: 'vector',
-                url: 'pmtiles://manzanas.pmtiles'
-            });
-
+            // 1b. Manzanas Urbanas (semáforo de cobertura forestal)
+            map.addSource('manzanas_source', { type: 'vector', url: 'pmtiles://manzanas.pmtiles' });
             map.addLayer({
-                'id': 'manzanas-layer',
-                'type': 'fill',
-                'source': 'manzanas_source',
-                'source-layer': 'manzanas',
-                'layout': {
-                    'visibility': 'none'
-                },
-                'paint': {
+                id: 'manzanas-layer', type: 'fill', source: 'manzanas_source', 'source-layer': 'manzanas',
+                layout: { visibility: 'none' },
+                paint: {
                     'fill-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'ratio_verde'],
-                        0.0, '#ef4444',   // Rojo (Sin árboles / Déficit crítico)
-                        1.0, '#f97316',   // Naranja (Baja vegetación)
-                        3.5, '#eab308',   // Amarillo (Medio / Transición)
-                        7.0, '#22c55e',   // Verde Claro (Buena vegetación)
-                        15.0, '#15803d'   // Verde Oscuro (Alta densidad forestal)
+                        'interpolate', ['linear'], ['get', 'ratio_verde'],
+                        0.0, '#ef4444', 1.0, '#f97316', 3.5, '#eab308', 7.0, '#22c55e', 15.0, '#15803d'
                     ],
                     'fill-opacity': 0.65
                 }
             });
-
             map.addLayer({
-                'id': 'manzanas-borde',
-                'type': 'line',
-                'source': 'manzanas_source',
-                'source-layer': 'manzanas',
-                'layout': {
-                    'visibility': 'none'
-                },
-                'paint': {
-                    'line-color': '#101f16',
-                    'line-width': 1.2,
-                    'line-opacity': 0.6
-                }
+                id: 'manzanas-borde', type: 'line', source: 'manzanas_source', 'source-layer': 'manzanas',
+                layout: { visibility: 'none' },
+                paint: { 'line-color': '#101f16', 'line-width': 1.2, 'line-opacity': 0.6 }
             });
 
-            // 2. Capa de Arbolado y Vegetación 3D (462,806 árboles en PMTiles)
-            map.addSource('arboles_3d_source', {
-                type: 'vector',
-                url: 'pmtiles://arboles.pmtiles'
-            });
-
+            // 2. Arbolado 3D
+            map.addSource('arboles_3d_source', { type: 'vector', url: 'pmtiles://arboles.pmtiles' });
             map.addLayer({
-                'id': 'arboles-extruidos-3d',
-                'type': 'fill-extrusion',
-                'source': 'arboles_3d_source',
-                'source-layer': 'arboles',
-                'paint': {
+                id: 'arboles-extruidos-3d', type: 'fill-extrusion', source: 'arboles_3d_source', 'source-layer': 'arboles',
+                paint: {
                     'fill-extrusion-height': ['get', 'altura_m'],
                     'fill-extrusion-base': 0,
                     'fill-extrusion-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'altura_m'],
-                        2, '#9dbb63',
-                        6, '#63994f',
-                        12, '#38713f',
-                        20, '#173f27'
+                        'interpolate', ['linear'], ['get', 'altura_m'],
+                        2, '#9dbb63', 6, '#63994f', 12, '#38713f', 20, '#173f27'
                     ],
                     'fill-extrusion-opacity': 0.85
                 }
             });
 
-            // 3. Capa de Edificios 3D (51,849 edificios en PMTiles)
-            map.addSource('edificios_3d_source', {
-                type: 'vector',
-                url: 'pmtiles://edificios.pmtiles'
-            });
-
+            // 3. Edificios 3D
+            map.addSource('edificios_3d_source', { type: 'vector', url: 'pmtiles://edificios.pmtiles' });
             map.addLayer({
-                'id': 'edificios-extruidos-3d',
-                'type': 'fill-extrusion',
-                'source': 'edificios_3d_source',
-                'source-layer': 'edificios',
-                'paint': {
+                id: 'edificios-extruidos-3d', type: 'fill-extrusion', source: 'edificios_3d_source', 'source-layer': 'edificios',
+                paint: {
                     'fill-extrusion-height': ['get', 'altura_m'],
                     'fill-extrusion-base': 0,
                     'fill-extrusion-color': [
-                        'interpolate',
-                        ['linear'],
-                        ['get', 'altura_m'],
-                        0, '#e8dfc9',
-                        6, '#d4b585',
-                        15, '#b0764a',
-                        35, '#7c4a2d'
+                        'interpolate', ['linear'], ['get', 'altura_m'],
+                        0, '#e8dfc9', 6, '#d4b585', 15, '#b0764a', 35, '#7c4a2d'
                     ],
                     'fill-extrusion-opacity': 0.88
                 }
             });
+            pct = 40; fill.style.width = pct + '%';
 
-            // Cargar POIs para el buscador desde pois.json local
-            fetch('pois.json')
-                .then(r => r.json())
-                .then(data => {
-                    if (data) listaPois = data;
-                }).catch(e => console.log('Aviso POIs JSON:', e));
+            // POIs para el buscador
+            fetch('pois.json').then(r => r.json()).then(data => { if (data) listaPois = data; }).catch(e => console.log('Aviso POIs JSON:', e));
 
             map.addControl(new maplibregl.NavigationControl());
 
-            // Actualizar Métricas en tiempo real al mover/rotar el mapa
-            map.on('move', actualizarMetricas);
-            map.on('moveend', actualizarMetricas);
-            actualizarMetricas();
+            // Las métricas se calculan solo cuando el mapa queda quieto (nunca durante el movimiento)
+            map.on('idle', () => programarMetricas(200));
+
+            // Esperar (con tope) a que el encuadre final tenga sus tiles, así la intro arranca con datos reales.
+            // La fuente de manzanas está oculta y no se espera.
+            const claves = ['edificios_3d_source', 'arboles_3d_source', 'parques_source'];
+            let arrancada = false;
+            function arrancar() {
+                if (arrancada) return;
+                arrancada = true;
+                clearInterval(poll);
+                fill.style.width = '100%';
+                setTimeout(iniciarIntro, 350);
+            }
+            const t0 = performance.now();
+            const poll = setInterval(() => {
+                const listos = claves.filter(id => map.isSourceLoaded(id)).length;
+                fill.style.width = Math.max(pct, 40 + Math.round((listos / claves.length) * 55)) + '%';
+                if (listos === claves.length && map.loaded()) arrancar();
+                else if (performance.now() - t0 > 12000) arrancar(); // tope de 12 s
+            }, 250);
         });
 
-        // Evento Click en Edificios 3D
+        // ================== MÉTRICAS DEL CUADRANTE ==================
+        // Solo con el mapa quieto ('idle'), con debounce, y deduplicando features partidos entre tiles.
+        function primeraCoordenada(geom) {
+            let c = geom && geom.coordinates;
+            while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+            return Array.isArray(c) ? c : [0, 0];
+        }
+
+        function claveFeature(f) {
+            if (f.id !== undefined && f.id !== null) return 'id:' + f.id;
+            const p = f.properties || {};
+            if (p.id !== undefined && p.id !== null) return 'p:' + p.id;
+            const c = primeraCoordenada(f.geometry);
+            return 'g:' + (p.altura_m || 0) + '|' + c[0].toFixed(5) + ',' + c[1].toFixed(5);
+        }
+
+        function contarUnicos(features) {
+            const set = new Set();
+            for (let i = 0; i < features.length; i++) set.add(claveFeature(features[i]));
+            return set.size;
+        }
+
+        function cajaReticulo() {
+            const reticle = document.getElementById('reticle-box');
+            if (!reticle) return undefined;
+            const rect = reticle.getBoundingClientRect();
+            const canvas = map.getCanvas().getBoundingClientRect();
+            return [[rect.left - canvas.left, rect.top - canvas.top], [rect.right - canvas.left, rect.bottom - canvas.top]];
+        }
+
+        function programarMetricas(delay) {
+            clearTimeout(metricasTimer);
+            metricasTimer = setTimeout(actualizarMetricas, delay == null ? 200 : delay);
+        }
+
+        function actualizarMetricas() {
+            if (introRunning) return;
+            if (document.getElementById('toggle-manzanas').checked) return; // en vista de manzanas se congelan
+            if (!map.getLayer('edificios-extruidos-3d')) return;
+
+            const caja = cajaReticulo();
+            const consultar = (layer) => {
+                const opts = { layers: [layer] };
+                return caja ? map.queryRenderedFeatures(caja, opts) : map.queryRenderedFeatures(opts);
+            };
+
+            const totalEdif = contarUnicos(consultar('edificios-extruidos-3d'));
+
+            // Con los árboles apagados la capa no se puede consultar: se conserva el último conteo
+            if (document.getElementById('toggle-veg').checked && map.getLayer('arboles-extruidos-3d')) {
+                ultimoConteoArboles = contarUnicos(consultar('arboles-extruidos-3d'));
+            }
+            const totalArboles = ultimoConteoArboles;
+
+            const ratio = (totalEdif + totalArboles) > 0 ? Math.round((totalArboles / (totalEdif + totalArboles)) * 100) : 0;
+
+            document.getElementById('m-edificios').textContent = totalEdif.toLocaleString();
+            document.getElementById('m-arboles').textContent = totalArboles.toLocaleString();
+            document.getElementById('m-ratio').textContent = ratio + '%';
+        }
+
+        // ================== INTERACCIÓN ==================
         map.on('click', 'edificios-extruidos-3d', (e) => {
             if (!e.features.length) return;
-            
             const props = e.features[0].properties;
-            const nombre = props.nombre || props.poi_nombre || 'Edificación Urbana';
-            const categoria = props.poi_categoria || props.clase || 'Residencial / Servicio';
-            const altura = props.altura_m ? props.altura_m.toFixed(1) : '4.0';
-            const pisos = Math.max(1, Math.round(props.altura_m / 3.5));
+            const nombre = escapeHTML(props.nombre || props.poi_nombre || 'Edificación Urbana');
+            const categoria = escapeHTML(props.poi_categoria || props.clase || 'Residencial / Servicio');
+            const alturaNum = Number(props.altura_m) || 0;
+            const altura = alturaNum ? alturaNum.toFixed(1) : '4.0';
+            const pisos = Math.max(1, Math.round(alturaNum / 3.5));
             const lidarStatus = props.altura_lidar ? '✅ Medida real con LiDAR (10cm)' : 'ℹ️ Estimada por modelo base';
 
             const content = `
@@ -450,74 +505,19 @@
                 <div class="popup-val">📐 <strong>Altura:</strong> ${altura} metros (~${pisos} pisos)</div>
                 <div class="popup-val">📡 <strong>Origen Z:</strong> ${lidarStatus}</div>
             `;
-
-            new maplibregl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(content)
-                .addTo(map);
+            new maplibregl.Popup().setLngLat(e.lngLat).setHTML(content).addTo(map);
         });
 
-        // Cambiar Cursor
         map.on('mouseenter', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'edificios-extruidos-3d', () => { map.getCanvas().style.cursor = ''; });
 
-        // Actualizar Dashboard de Métricas del Cuadrante Negro
-        function actualizarMetricas() {
-            const reticle = document.getElementById('reticle-box');
-            let featuresEdif = [];
-            let featuresArboles = [];
-
-            if (reticle) {
-                const rect = reticle.getBoundingClientRect();
-                const mapCanvas = map.getCanvas().getBoundingClientRect();
-                const x1 = rect.left - mapCanvas.left;
-                const y1 = rect.top - mapCanvas.top;
-                const x2 = rect.right - mapCanvas.left;
-                const y2 = rect.bottom - mapCanvas.top;
-                
-                featuresEdif = map.queryRenderedFeatures([[x1, y1], [x2, y2]], { layers: ['edificios-extruidos-3d'] });
-                if (map.getLayer('arboles-extruidos-3d')) {
-                    featuresArboles = map.queryRenderedFeatures([[x1, y1], [x2, y2]], { layers: ['arboles-extruidos-3d'] });
-                }
-            } else {
-                featuresEdif = map.queryRenderedFeatures({ layers: ['edificios-extruidos-3d'] });
-                if (map.getLayer('arboles-extruidos-3d')) {
-                    featuresArboles = map.queryRenderedFeatures({ layers: ['arboles-extruidos-3d'] });
-                }
-            }
-
-            const uniqueEdif = new Set();
-            let maxAlt = 0;
-
-            featuresEdif.forEach(f => {
-                const id = f.id || (f.properties && f.properties.id) || (f.geometry ? JSON.stringify(f.geometry.coordinates[0][0]) : Math.random());
-                uniqueEdif.add(id);
-                const h = (f.properties && f.properties.altura_m) ? f.properties.altura_m : 4;
-                if (h > maxAlt) maxAlt = h;
-            });
-
-            const totalEdif = uniqueEdif.size > 0 ? uniqueEdif.size : featuresEdif.length;
-            const totalArboles = featuresArboles.length;
-
-            // Cálculo Ratio Verde/Gris
-            let ratio = 0;
-            if (totalEdif + totalArboles > 0) {
-                ratio = Math.round((totalArboles / (totalEdif + totalArboles)) * 100);
-            }
-
-            document.getElementById('m-edificios').innerText = totalEdif.toLocaleString();
-            document.getElementById('m-arboles').innerText = totalArboles.toLocaleString();
-            document.getElementById('m-ratio').innerText = ratio + '%';
-        }
-
-        // Evento Click en Manzanas Urbanas
         map.on('click', 'manzanas-layer', (e) => {
             if (!e.features.length) return;
             const props = e.features[0].properties;
-            const idManz = props.id_manzana || 'Urbana';
-            const arboles = props.cant_arboles || 0;
-            const edif = props.cant_edificios || 0;
-            const ratio = props.ratio_verde ? props.ratio_verde.toFixed(1) : '0.0';
+            const idManz = escapeHTML(props.id_manzana || 'Urbana');
+            const arboles = Number(props.cant_arboles) || 0;
+            const edif = Number(props.cant_edificios) || 0;
+            const ratio = props.ratio_verde ? Number(props.ratio_verde).toFixed(1) : '0.0';
 
             const content = `
                 <div class="popup-title">Manzana Urbana #${idManz}</div>
@@ -526,98 +526,68 @@
                 <div class="popup-val">🏢 <strong>Edificación:</strong> ${edif} estructuras</div>
                 <div class="popup-val">🌿 <strong>Cobertura Verde:</strong> ${ratio}% del suelo</div>
             `;
-
-            new maplibregl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(content)
-                .addTo(map);
+            new maplibregl.Popup().setLngLat(e.lngLat).setHTML(content).addTo(map);
         });
 
-        // Toggle Capa Vegetacion (Arboles 3D)
+        // Toggles instantáneos (sin animaciones: cambian solo la visibilidad de la capa)
         function toggleVegetacion(visible) {
-            const manzanasChecked = document.getElementById('toggle-manzanas') ? document.getElementById('toggle-manzanas').checked : false;
+            const manzanasChecked = document.getElementById('toggle-manzanas').checked;
             if (!manzanasChecked && map.getLayer('arboles-extruidos-3d')) {
                 map.setLayoutProperty('arboles-extruidos-3d', 'visibility', visible ? 'visible' : 'none');
             }
-            actualizarMetricas();
         }
 
-        // Toggle Capa Manzanas (Densidad de arboles por cuadra)
         function toggleManzanas(visible) {
             const visibility = visible ? 'visible' : 'none';
             if (map.getLayer('manzanas-layer')) {
                 map.setLayoutProperty('manzanas-layer', 'visibility', visibility);
                 map.setLayoutProperty('manzanas-borde', 'visibility', visibility);
             }
-
             if (visible) {
-                // Al activar la densidad por cuadra: Ocultar edificios y árboles
-                if (map.getLayer('edificios-extruidos-3d')) {
-                    map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'none');
-                }
-                if (map.getLayer('arboles-extruidos-3d')) {
-                    map.setLayoutProperty('arboles-extruidos-3d', 'visibility', 'none');
-                }
+                if (map.getLayer('edificios-extruidos-3d')) map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'none');
+                if (map.getLayer('arboles-extruidos-3d')) map.setLayoutProperty('arboles-extruidos-3d', 'visibility', 'none');
             } else {
-                // Al desactivar: Restaurar edificios y árboles
-                if (map.getLayer('edificios-extruidos-3d')) {
-                    map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'visible');
-                }
-                const vegChecked = document.getElementById('toggle-veg') ? document.getElementById('toggle-veg').checked : true;
-                if (map.getLayer('arboles-extruidos-3d')) {
-                    map.setLayoutProperty('arboles-extruidos-3d', 'visibility', vegChecked ? 'visible' : 'none');
-                }
+                if (map.getLayer('edificios-extruidos-3d')) map.setLayoutProperty('edificios-extruidos-3d', 'visibility', 'visible');
+                const vegChecked = document.getElementById('toggle-veg').checked;
+                if (map.getLayer('arboles-extruidos-3d')) map.setLayoutProperty('arboles-extruidos-3d', 'visibility', vegChecked ? 'visible' : 'none');
             }
-            actualizarMetricas();
         }
 
-        // Buscador de Lugares / POIs desde pois.json local
+        // ================== BUSCADOR ==================
         function buscarLugar(q) {
             const resContainer = document.getElementById('search-results');
-            if (!q || q.length < 2) {
-                resContainer.style.display = 'none';
-                return;
-            }
-
+            if (!q || q.length < 2) { resContainer.style.display = 'none'; return; }
             const query = q.toLowerCase();
-            const matches = listaPois.filter(item => {
+            resultadosBusqueda = listaPois.filter(item => {
                 const n = item.n || '';
                 const c = item.c || '';
                 return n.toLowerCase().includes(query) || c.toLowerCase().includes(query);
             }).slice(0, 5);
-
-            if (matches.length === 0) {
-                resContainer.style.display = 'none';
-                return;
-            }
-
-            resContainer.innerHTML = matches.map((item, i) => `
-                <div class="search-item" onclick="volarA(${item.x}, ${item.y}, '${item.n.replace(/'/g, "\'")}', '${item.c.replace(/'/g, "\'")}')">
-                    <strong>${item.n}</strong>
-                    <span>${item.c}</span>
+            if (resultadosBusqueda.length === 0) { resContainer.style.display = 'none'; return; }
+            // Se pasa el índice (no el texto) al onclick: los nombres con comillas ya no rompen el HTML
+            resContainer.innerHTML = resultadosBusqueda.map((item, i) => `
+                <div class="search-item" onclick="volarADesdeResultado(${i})">
+                    <strong>${escapeHTML(item.n)}</strong>
+                    <span>${escapeHTML(item.c)}</span>
                 </div>
             `).join('');
-
             resContainer.style.display = 'block';
+        }
+
+        function volarADesdeResultado(i) {
+            const item = resultadosBusqueda[i];
+            if (item) volarA(item.x, item.y, item.n || '', item.c || '');
         }
 
         function volarA(lng, lat, nombre, cat) {
             document.getElementById('search-results').style.display = 'none';
             document.getElementById('input-search').value = nombre;
-
-            map.flyTo({
-                center: [lng, lat],
-                zoom: 17.5,
-                pitch: 68,
-                bearing: -15,
-                essential: true
-            });
-
+            map.flyTo({ center: [lng, lat], zoom: 17.5, pitch: 68, bearing: -15, essential: true });
             new maplibregl.Popup()
                 .setLngLat([lng, lat])
                 .setHTML(`
-                    <div class="popup-title">${nombre}</div>
-                    <div class="popup-tag">${cat}</div>
+                    <div class="popup-title">${escapeHTML(nombre)}</div>
+                    <div class="popup-tag">${escapeHTML(cat)}</div>
                     <div class="popup-val">📍 <strong>Ubicación:</strong> Tacuarembó Urbana</div>
                 `)
                 .addTo(map);
