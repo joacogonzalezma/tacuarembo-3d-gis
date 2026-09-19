@@ -397,6 +397,15 @@
                     'fill-extrusion-opacity': 0.88
                 }
             });
+            // 4. Capas planas invisibles: solo sirven para contar en vivo (consultar extrusiones 3D es lo caro)
+            map.addLayer({
+                id: 'edificios-q', type: 'fill', source: 'edificios_3d_source', 'source-layer': 'edificios',
+                paint: { 'fill-opacity': 0 }
+            });
+            map.addLayer({
+                id: 'arboles-q', type: 'fill', source: 'arboles_3d_source', 'source-layer': 'arboles',
+                paint: { 'fill-opacity': 0 }
+            });
             pct = 40; fill.style.width = pct + '%';
 
             // POIs para el buscador
@@ -404,8 +413,12 @@
 
             map.addControl(new maplibregl.NavigationControl());
 
-            // Las métricas se calculan solo cuando el mapa queda quieto (nunca durante el movimiento)
-            map.on('idle', () => programarMetricas(200));
+            // Métricas en vivo: mientras se mueve, cuando llegan tiles nuevos y un cálculo final al quedar quieto
+            map.on('move', solicitarMetricas);
+            map.on('sourcedata', (e) => {
+                if (e.dataType === 'source' && (e.sourceId === 'edificios_3d_source' || e.sourceId === 'arboles_3d_source')) solicitarMetricas();
+            });
+            map.on('idle', () => programarMetricas(100));
 
             // Esperar (con tope) a que el encuadre final tenga sus tiles, así la intro arranca con datos reales.
             // La fuente de manzanas está oculta y no se espera.
@@ -427,8 +440,9 @@
             }, 250);
         });
 
-        // ================== MÉTRICAS DEL CUADRANTE ==================
-        // Solo con el mapa quieto ('idle'), con debounce, y deduplicando features partidos entre tiles.
+        // ================== MÉTRICAS DEL CUADRANTE (EN VIVO) ==================
+        // Se recalculan mientras el mapa se mueve, con frecuencia autorregulada según lo que tarde el cálculo,
+        // y deduplicando features partidos entre tiles.
         function primeraCoordenada(geom) {
             let c = geom && geom.coordinates;
             while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
@@ -443,12 +457,6 @@
             return 'g:' + (p.altura_m || 0) + '|' + c[0].toFixed(5) + ',' + c[1].toFixed(5);
         }
 
-        function contarUnicos(features) {
-            const set = new Set();
-            for (let i = 0; i < features.length; i++) set.add(claveFeature(features[i]));
-            return set.size;
-        }
-
         function cajaReticulo() {
             const reticle = document.getElementById('reticle-box');
             if (!reticle) return undefined;
@@ -459,33 +467,69 @@
 
         function programarMetricas(delay) {
             clearTimeout(metricasTimer);
-            metricasTimer = setTimeout(actualizarMetricas, delay == null ? 200 : delay);
+            metricasTimer = setTimeout(() => actualizarMetricas(true), delay == null ? 200 : delay);
         }
 
-        function actualizarMetricas() {
-            if (introRunning) return;
+        // ---------- Cálculo en vivo (liviano) ----------
+        // En movimiento: consulta las capas planas invisibles y usa una clave barata (sin tocar la geometria).
+        // Al quedar quieto (idle): un ultimo conteo exacto que elimina duplicados entre tiles.
+        const MIN_INTERVALO_MS = 40;   // ~25 actualizaciones por segundo como maximo
+        let costoMetricaMs = 10;       // lo que tarda el calculo (se mide solo)
+        let ultimaMetricaTs = 0;
+        let metricaAgendada = false;
+        const elEdif = document.getElementById('m-edificios');
+        const elArb = document.getElementById('m-arboles');
+        const elRatio = document.getElementById('m-ratio');
+
+        function claveRapida(f) {
+            if (f.id !== undefined && f.id !== null) return f.id;
+            const p = f.properties;
+            return (p && p.id !== undefined && p.id !== null) ? 'p' + p.id : null;
+        }
+
+        // Agrupa llamadas: como maximo un calculo cada max(40 ms, 3 x lo que tarda el calculo)
+        function solicitarMetricas() {
+            if (metricaAgendada || introRunning) return;
+            metricaAgendada = true;
+            const espera = Math.max(MIN_INTERVALO_MS, costoMetricaMs * 3) - (performance.now() - ultimaMetricaTs);
+            setTimeout(() => { metricaAgendada = false; actualizarMetricas(false); }, Math.max(0, espera));
+        }
+
+        function actualizarMetricas(exacto) {
+            if (introRunning || document.body.classList.contains('intro')) return;
             if (document.getElementById('toggle-manzanas').checked) return; // en vista de manzanas se congelan
-            if (!map.getLayer('edificios-extruidos-3d')) return;
+            if (!map.getLayer('edificios-q')) return;
 
+            const t0 = performance.now();
+            const contarArboles = document.getElementById('toggle-veg').checked;
+            const opts = { layers: contarArboles ? ['edificios-q', 'arboles-q'] : ['edificios-q'] };
             const caja = cajaReticulo();
-            const consultar = (layer) => {
-                const opts = { layers: [layer] };
-                return caja ? map.queryRenderedFeatures(caja, opts) : map.queryRenderedFeatures(opts);
-            };
+            const feats = caja ? map.queryRenderedFeatures(caja, opts) : map.queryRenderedFeatures(opts);
 
-            const totalEdif = contarUnicos(consultar('edificios-extruidos-3d'));
-
-            // Con los árboles apagados la capa no se puede consultar: se conserva el último conteo
-            if (document.getElementById('toggle-veg').checked && map.getLayer('arboles-extruidos-3d')) {
-                ultimoConteoArboles = contarUnicos(consultar('arboles-extruidos-3d'));
+            const setE = new Set(), setA = new Set();
+            let sinIdE = 0, sinIdA = 0;
+            for (let i = 0; i < feats.length; i++) {
+                const f = feats[i];
+                const esEdif = f.layer.id === 'edificios-q';
+                const k = exacto ? claveFeature(f) : claveRapida(f);
+                if (k === null) { if (esEdif) sinIdE++; else sinIdA++; }
+                else (esEdif ? setE : setA).add(k);
             }
-            const totalArboles = ultimoConteoArboles;
 
+            const totalEdif = setE.size + sinIdE;
+            // Con los arboles apagados se conserva el ultimo conteo
+            if (contarArboles) ultimoConteoArboles = setA.size + sinIdA;
+            const totalArboles = ultimoConteoArboles;
             const ratio = (totalEdif + totalArboles) > 0 ? Math.round((totalArboles / (totalEdif + totalArboles)) * 100) : 0;
 
-            document.getElementById('m-edificios').textContent = totalEdif.toLocaleString();
-            document.getElementById('m-arboles').textContent = totalArboles.toLocaleString();
-            document.getElementById('m-ratio').textContent = ratio + '%';
+            elEdif.textContent = totalEdif.toLocaleString();
+            elArb.textContent = totalArboles.toLocaleString();
+            elRatio.textContent = ratio + '%';
+
+            // Se mide lo que tardo para ajustar la frecuencia automaticamente
+            const ahora = performance.now();
+            costoMetricaMs = costoMetricaMs * 0.6 + (ahora - t0) * 0.4;
+            ultimaMetricaTs = ahora;
         }
 
         // ================== INTERACCIÓN ==================
